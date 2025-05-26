@@ -1,0 +1,68 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  TEACHER
+  STUDENT
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password      String
+  role          UserRole
+  firstName     String
+  lastName      String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  assignments   Assignment[]
+  createdUnits  Unit[]    @relation("CreatedBy")
+}
+
+model Unit {
+  id          String    @id @default(uuid())
+  number      Int       @unique
+  title       String
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  createdBy   User      @relation("CreatedBy", fields: [teacherId], references: [id])
+  teacherId   String
+  questions   Question[]
+  assignments Assignment[]
+}
+
+model Question {
+  id          String    @id @default(uuid())
+  content     String
+  type        String    // e.g., "multiple_choice", "essay", etc.
+  options     Json?     // For multiple choice questions
+  answer      String?
+  unit        Unit      @relation(fields: [unitId], references: [id])
+  unitId      String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Assignment {
+  id          String    @id @default(uuid())
+  title       String
+  description String?
+  dueDate     DateTime?
+  unit        Unit      @relation(fields: [unitId], references: [id])
+  unitId      String
+  student     User      @relation(fields: [studentId], references: [id])
+  studentId   String
+  status      String    @default("PENDING") // PENDING, COMPLETED, GRADED
+  score       Int?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+} 
