@@ -81,19 +81,22 @@ model Unit {
 }
 
 model Assignment {
-  id        String   @id @default(uuid())
-  title     String
-  type      String   // "quiz", "coding", "project", etc.
-  data      Json?    // Assignment-specific data
-  isShared  Boolean  @default(false)
-  unit      Unit?    @relation(fields: [unitId], references: [id])
-  unitId    String?
-  course    Course?  @relation(fields: [courseId], references: [id])
-  courseId  String?
-  school    School   @relation(fields: [schoolId], references: [id])
-  schoolId  String
-  createdBy User     @relation("AssignmentCreatedBy", fields: [createdById], references: [id])
+  id          String   @id @default(uuid())
+  title       String
+  type        String
+  data        Json?
+  isShared    Boolean  @default(false)
+  templateId  String?
+  template    Assignment? @relation("AssignmentTemplate", fields: [templateId], references: [id])
+  copies      Assignment[] @relation("AssignmentTemplate")
+  unit        Unit?    @relation(fields: [unitId], references: [id])
+  unitId      String?
+  course      Course?  @relation(fields: [courseId], references: [id])
+  courseId    String?
+  school      School   @relation(fields: [schoolId], references: [id])
+  schoolId    String
+  createdBy   User     @relation("AssignmentCreatedBy", fields: [createdById], references: [id])
   createdById String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 } 
