@@ -203,3 +203,70 @@ Tailwind will work the same way on Linux as on Windows. Just make sure to run `n
 ---
 
 **You are now ready to run your LMS on a Linux server!** 
+
+---
+
+## 12. (Recommended) Using Two M.2 Drives: OS/App and Database Separation
+
+If your server has two M.2 slots, you can optimize performance and reliability by separating your Linux OS/app code and your PostgreSQL database data onto different drives.
+
+### Recommended Setup
+| Drive         | Use for                |
+|--------------|------------------------|
+| M.2 #1       | Linux OS, app code     |
+| M.2 #2       | PostgreSQL data        |
+
+### Benefits
+- Reduces I/O contention between the OS/app and the database
+- Makes it easier to back up or clone the database drive
+- If the OS drive fails, your database data is still safe (and vice versa)
+- You can upgrade/replace one drive without affecting the other
+
+### How to Set Up PostgreSQL on a Separate Drive
+
+#### 1. Format and Mount the Second M.2 Drive
+- Identify the new drive (e.g., `/dev/nvme1n1`):
+  ```sh
+  lsblk
+  ```
+- Format the drive (replace `nvme1n1` with your device):
+  ```sh
+  sudo mkfs.ext4 /dev/nvme1n1
+  ```
+- Create a mount point and mount the drive:
+  ```sh
+  sudo mkdir -p /mnt/m2db
+  sudo mount /dev/nvme1n1 /mnt/m2db
+  ```
+- To mount automatically at boot, add to `/etc/fstab`:
+  ```sh
+  echo '/dev/nvme1n1 /mnt/m2db ext4 defaults 0 2' | sudo tee -a /etc/fstab
+  ```
+
+#### 2. Initialize PostgreSQL Data Directory on the Second Drive
+- Stop PostgreSQL if running:
+  ```sh
+  sudo systemctl stop postgresql
+  ```
+- As the `postgres` user, initialize the new data directory:
+  ```sh
+  sudo -i -u postgres
+  initdb -D /mnt/m2db/pgdata
+  exit
+  ```
+- Update the PostgreSQL service to use the new data directory. Edit `/etc/postgresql/<version>/main/postgresql.conf` and set:
+  ```
+  data_directory = '/mnt/m2db/pgdata'
+  ```
+- Start PostgreSQL:
+  ```sh
+  sudo systemctl start postgresql
+  ```
+
+#### 3. Continue with Database Setup
+- Create your database and user as described above.
+- Update your `.env` file as needed.
+
+---
+
+**This setup gives you maximum performance, reliability, and flexibility for your LMS deployment!** 
