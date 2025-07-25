@@ -1,4 +1,4 @@
-// This is your Prisma schema file
+// Robust Multi-School LMS Prisma Schema
 
 generator client {
   provider = "prisma-client-js"
@@ -9,60 +9,91 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum UserRole {
-  TEACHER
-  STUDENT
-}
+model School {
+  id        String   @id @default(uuid())
+  name      String
+  code      String   @unique // For URL routing or selection
+  logo      String?
+  primaryColor String?
+  secondaryColor String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-model User {
-  id            String    @id @default(uuid())
-  email         String    @unique
-  password      String
-  role          UserRole
-  firstName     String
-  lastName      String
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  assignments   Assignment[]
-  createdUnits  Unit[]    @relation("CreatedBy")
-}
-
-model Unit {
-  id          String    @id @default(uuid())
-  number      Int       @unique
-  title       String
-  description String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  createdBy   User      @relation("CreatedBy", fields: [teacherId], references: [id])
-  teacherId   String
-  questions   Question[]
+  users     User[]
+  courses   Course[]
+  units     Unit[]
   assignments Assignment[]
 }
 
-model Question {
-  id          String    @id @default(uuid())
-  content     String
-  type        String    // e.g., "multiple_choice", "essay", etc.
-  options     Json?     // For multiple choice questions
-  answer      String?
-  unit        Unit      @relation(fields: [unitId], references: [id])
-  unitId      String
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+model User {
+  id        String   @id @default(uuid())
+  email     String
+  password  String
+  role      String   // ADMIN, TEACHER, STUDENT, etc.
+  firstName String?
+  lastName  String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  school    School   @relation(fields: [schoolId], references: [id])
+  schoolId  String
+
+  assignmentsCreated Assignment[] @relation("AssignmentCreatedBy")
+
+  @@unique([email, schoolId])
+}
+
+model CoreSubject {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  courses   Course[]
+}
+
+model Course {
+  id            String      @id @default(uuid())
+  name          String
+  coreSubject   CoreSubject @relation(fields: [coreSubjectId], references: [id])
+  coreSubjectId String
+  school        School      @relation(fields: [schoolId], references: [id])
+  schoolId      String
+  units         Unit[]
+  assignments   Assignment[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([name, schoolId])
+}
+
+model Unit {
+  id        String   @id @default(uuid())
+  name      String
+  course    Course   @relation(fields: [courseId], references: [id])
+  courseId  String
+  school    School   @relation(fields: [schoolId], references: [id])
+  schoolId  String
+  assignments Assignment[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name, courseId, schoolId])
 }
 
 model Assignment {
-  id          String    @id @default(uuid())
-  title       String
-  description String?
-  dueDate     DateTime?
-  unit        Unit      @relation(fields: [unitId], references: [id])
-  unitId      String
-  student     User      @relation(fields: [studentId], references: [id])
-  studentId   String
-  status      String    @default("PENDING") // PENDING, COMPLETED, GRADED
-  score       Int?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id        String   @id @default(uuid())
+  title     String
+  type      String   // "quiz", "coding", "project", etc.
+  data      Json?    // Assignment-specific data
+  isShared  Boolean  @default(false)
+  unit      Unit?    @relation(fields: [unitId], references: [id])
+  unitId    String?
+  course    Course?  @relation(fields: [courseId], references: [id])
+  courseId  String?
+  school    School   @relation(fields: [schoolId], references: [id])
+  schoolId  String
+  createdBy User     @relation("AssignmentCreatedBy", fields: [createdById], references: [id])
+  createdById String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 } 
