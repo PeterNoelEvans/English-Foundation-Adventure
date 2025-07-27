@@ -183,6 +183,7 @@ router.post('/register', [
   body('role').isIn(['TEACHER', 'STUDENT']),
   body('yearLevel').optional().isIn(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6']),
   body('classNum').optional().isIn(['1', '2', '3', '4', '5', '6']),
+  body('studentNumber').optional().isLength({ min: 5, max: 5 }).isNumeric().withMessage('Student number must be exactly 5 digits'),
   body('organization').optional()
 ], async (req, res) => {
   try {
@@ -191,7 +192,7 @@ router.post('/register', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { email, password, firstName, lastName, role, yearLevel, classNum, organization } = req.body;
+    const { email, password, firstName, lastName, role, yearLevel, classNum, studentNumber, organization } = req.body;
 
     // Get organization
     const orgCode = organization || 'pbs';
@@ -222,6 +223,23 @@ router.post('/register', [
       organizationId: org.id
     };
 
+    // Add student number if provided
+    if (studentNumber && studentNumber.trim()) {
+      // Check if student number already exists in the organization
+      const existingStudentNumber = await prisma.user.findFirst({
+        where: {
+          studentNumber: parseInt(studentNumber),
+          organizationId: org.id
+        }
+      });
+      
+      if (existingStudentNumber) {
+        return res.status(400).json({ message: 'Student number already exists in this organization' });
+      }
+      
+      userData.studentNumber = parseInt(studentNumber);
+    }
+
     // Add classroom for students
     if (role === 'STUDENT' && yearLevel && classNum) {
       const classroom = await getOrCreateClassroom(org.id, yearLevel, classNum);
@@ -245,6 +263,7 @@ router.post('/register', [
         role: user.role,
         firstName: user.firstName,
         lastName: user.lastName,
+        studentNumber: user.studentNumber,
         organization: user.organization,
         classroom: user.classroom
       }
