@@ -62,12 +62,22 @@ const Teacher: React.FC = () => {
   const [newAssignment, setNewAssignment] = useState({
     title: '',
     description: '',
-    type: 'assignment',
+    type: 'multiple-choice',
+    subtype: '',
     category: '',
+    difficulty: 'beginner',
+    timeLimit: '',
+    points: 1,
+    instructions: '',
     criteria: '',
+    autoGrade: true,
+    showFeedback: true,
     dueDate: '',
     quarter: 'Q1',
     maxAttempts: '',
+    shuffleQuestions: false,
+    allowReview: true,
+    tags: [] as string[],
     courseId: '',
     unitId: '',
     published: true
@@ -546,12 +556,22 @@ const Teacher: React.FC = () => {
       setNewAssignment({
         title: '',
         description: '',
-        type: 'assignment',
+        type: 'multiple-choice',
+        subtype: '',
         category: '',
+        difficulty: 'beginner',
+        timeLimit: '',
+        points: 1,
+        instructions: '',
         criteria: '',
+        autoGrade: true,
+        showFeedback: true,
         dueDate: '',
         quarter: 'Q1',
         maxAttempts: '',
+        shuffleQuestions: false,
+        allowReview: true,
+        tags: [],
         courseId: '',
         unitId: '',
         published: true
@@ -587,6 +607,7 @@ const Teacher: React.FC = () => {
     { id: 'dashboard', label: 'Dashboard', icon: '📊' },
     { id: 'course-structure', label: 'Subjects & Courses', icon: '📚' },
     { id: 'assignments', label: 'Assignments', icon: '📝' },
+    { id: 'assessment-creator', label: 'Assessment Creator', icon: '🎯' },
     { id: 'resources', label: 'Resources', icon: '📁' },
     { id: 'students', label: 'Students', icon: '👥' },
     { id: 'class-view', label: 'Class View', icon: '🏫' },
@@ -1381,6 +1402,54 @@ const Teacher: React.FC = () => {
     </div>
   );
 
+  const renderAssessmentCreator = () => (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold">Assessment Creator</h2>
+        <button
+          onClick={() => window.location.href = '/assessment-creator'}
+          className="btn-primary"
+        >
+          Create New Assessment
+        </button>
+      </div>
+      
+      <div className="bg-white rounded-lg shadow-sm p-6">
+        <h3 className="text-lg font-semibold mb-4">Assessment Types</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[
+            { type: 'multiple-choice', label: 'Multiple Choice', icon: '🔘', desc: 'Auto-graded questions with one correct answer' },
+            { type: 'true-false', label: 'True/False', icon: '✅', desc: 'Simple true/false questions' },
+            { type: 'matching', label: 'Matching', icon: '🔗', desc: 'Match items from two columns' },
+            { type: 'drag-and-drop', label: 'Drag & Drop', icon: '🎯', desc: 'Interactive drag and drop activities' },
+            { type: 'writing', label: 'Writing (Short)', icon: '✍️', desc: 'Short answer writing questions' },
+            { type: 'writing-long', label: 'Writing (Long)', icon: '📝', desc: 'Extended writing assignments' },
+            { type: 'speaking', label: 'Speaking', icon: '🎤', desc: 'Oral response assignments' },
+            { type: 'listening', label: 'Listening', icon: '🎧', desc: 'Audio-based questions' },
+            { type: 'assignment', label: 'Assignment', icon: '📋', desc: 'General assignment type' }
+          ].map((assessmentType) => (
+            <div key={assessmentType.type} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+              <div className="flex items-center mb-2">
+                <span className="text-2xl mr-3">{assessmentType.icon}</span>
+                <h4 className="font-semibold text-gray-900">{assessmentType.label}</h4>
+              </div>
+              <p className="text-sm text-gray-600 mb-3">{assessmentType.desc}</p>
+              <button
+                onClick={() => {
+                  setNewAssignment(prev => ({ ...prev, type: assessmentType.type }));
+                  setShowCreateAssignment(true);
+                }}
+                className="w-full px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              >
+                Create {assessmentType.label}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
   const renderAssignments = () => (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -1732,9 +1801,10 @@ const Teacher: React.FC = () => {
 
           {/* Main Content */}
           <div className="flex-1">
-          {activeTab === 'dashboard' && renderDashboard()}
+                      {activeTab === 'dashboard' && renderDashboard()}
             {activeTab === 'course-structure' && renderCourseStructure()}
             {activeTab === 'assignments' && renderAssignments()}
+            {activeTab === 'assessment-creator' && renderAssessmentCreator()}
             {activeTab === 'resources' && renderResources()}
             {activeTab === 'students' && renderStudents()}
             {activeTab === 'class-view' && renderClassView()}

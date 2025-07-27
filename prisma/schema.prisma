@@ -348,14 +348,36 @@ model Assessment {
   id          String   @id @default(uuid())
   title       String
   description String?
-  type        String   // 'quiz', 'matching', 'drag_and_drop', 'sortable', 'assignment'
-  category    String?  // e.g., 'Grammar', 'Listening', 'Speaking', etc.
+  type        String   // Assessment type: 'multiple-choice', 'true-false', 'matching', 'drag-and-drop', 'writing', 'writing-long', 'speaking', 'assignment', 'listening'
+  subtype     String?  // For drag-and-drop: 'ordering', 'categorization', 'fill-blank', 'labeling'
+  category    String?  // e.g., 'Grammar', 'Listening', 'Speaking', 'Vocabulary', etc.
+  difficulty  String?  // 'beginner', 'intermediate', 'advanced'
+  timeLimit   Int?     // Time limit in minutes (null = no limit)
+  points      Int      @default(1) // Points per question or total points
+  
+  // Content and questions
+  questions   Json?    // Question data structure varies by type
+  instructions String? // Specific instructions for the assessment
+  
+  // Grading and feedback
   criteria    String?  // Grading criteria/rubric for manually graded assessments
-  questions   Json?    // For quizzes and interactive assessments
+  autoGrade   Boolean  @default(true) // Whether assessment can be auto-graded
+  showFeedback Boolean @default(true) // Whether to show feedback after submission
+  
+  // Scheduling
   dueDate     DateTime? // For assignments
+  availableFrom DateTime? // When assessment becomes available
+  availableTo   DateTime? // When assessment becomes unavailable
   quarter     String   @default("Q1") // "Q1", "Q2", "Q3", "Q4"
+  
+  // Settings
   published   Boolean  @default(true)
   maxAttempts Int?     // Maximum allowed attempts (null = unlimited)
+  shuffleQuestions Boolean @default(false) // Whether to shuffle question order
+  allowReview Boolean  @default(true) // Whether students can review after submission
+  
+  // Metadata
+  tags        String[] // Array of tags for categorization
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -404,12 +426,35 @@ model MediaFile {
 
 model AssessmentSubmission {
   id           String   @id @default(uuid())
-  answers      Json?    // Student's answers
+  attempt      Int      @default(1) // Current attempt number
+  
+  // Submission content
+  answers      Json?    // Student's answers (structure varies by assessment type)
+  textResponse String?  // For writing/speaking assessments
+  fileUploads  Json?    // Array of uploaded file information
+  
+  // Grading and feedback
+  score        Float?   // Final score
+  maxScore     Float?   // Maximum possible score
+  percentage   Float?   // Score as percentage
+  feedback     Json?    // Detailed feedback (structure varies by type)
   comment      String?  // Teacher feedback/comment for manually graded assessments
-  score        Float?
-  submittedAt  DateTime @default(now())
-  attempts     Int?     // Total number of attempts
-  totalTime    Int?     // Accumulative time in seconds
+  gradedBy     String?  // ID of teacher who graded the submission
+  gradedAt     DateTime? // When the submission was graded
+  
+  // Timing and attempts
+  startedAt    DateTime @default(now())
+  submittedAt  DateTime? // When submitted (null if in progress)
+  timeSpent    Int?     // Time spent in seconds
+  totalTime    Int?     // Accumulative time across all attempts
+  
+  // Status
+  status       String   @default("IN_PROGRESS") // 'IN_PROGRESS', 'SUBMITTED', 'GRADED', 'LATE'
+  isLate       Boolean  @default(false)
+  
+  // Metadata
+  ipAddress    String?  // IP address of submission
+  userAgent    String?  // Browser/user agent information
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -419,7 +464,7 @@ model AssessmentSubmission {
   studentId    String
   student      User @relation(fields: [studentId], references: [id])
 
-  @@unique([assessmentId, studentId])
+  @@unique([assessmentId, studentId, attempt])
   @@map("assessment_submissions")
 }
 

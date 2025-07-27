@@ -22,7 +22,7 @@ router.get('/subjects', auth, requireRole(['STUDENT']), async (req, res) => {
     const subjects = await prisma.subject.findMany({
       where: { 
         organizationId: student.organizationId,
-        isActive: true 
+        isArchived: false 
       },
       select: {
         id: true,
@@ -33,7 +33,6 @@ router.get('/subjects', auth, requireRole(['STUDENT']), async (req, res) => {
           select: {
             id: true,
             name: true,
-            yearLevel: true,
             description: true
           }
         }
@@ -71,7 +70,6 @@ router.get('/courses/:subjectId', auth, requireRole(['STUDENT']), async (req, re
       select: {
         id: true,
         name: true,
-        yearLevel: true,
         description: true,
         subject: {
           select: {
@@ -80,7 +78,7 @@ router.get('/courses/:subjectId', auth, requireRole(['STUDENT']), async (req, re
           }
         }
       },
-      orderBy: { yearLevel: 'asc' }
+      orderBy: { name: 'asc' }
     });
 
     res.json({ courses });
@@ -149,7 +147,6 @@ router.post('/enroll', auth, requireRole(['STUDENT']), [
           select: {
             id: true,
             name: true,
-            yearLevel: true,
             subject: {
               select: {
                 id: true,
@@ -215,7 +212,6 @@ router.get('/my-courses', auth, requireRole(['STUDENT']), async (req, res) => {
           select: {
             id: true,
             name: true,
-            yearLevel: true,
             description: true,
             subject: {
               select: {
