@@ -21,6 +21,7 @@ const auth = async (req, res, next) => {
     }
 
     req.user = user;
+    req.user.userId = user.id; // Add this for compatibility
     req.token = token;
     next();
   } catch (error) {
@@ -37,4 +38,5 @@ const requireRole = (roles) => {
   };
 };
 
-module.exports = { auth, requireRole }; 
+module.exports = auth;
+module.exports.requireRole = requireRole; 

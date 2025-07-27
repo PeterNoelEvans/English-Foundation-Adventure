@@ -1,15 +1,21 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 console.log('DATABASE_URL:', process.env.DATABASE_URL);
 const express = require('express');
 const cors = require('cors');
-const dotenv = require('dotenv');
 const { PrismaClient } = require('@prisma/client');
 const authRoutes = require('./routes/auth');
 const questionsRoutes = require('./routes/questions');
 const unitsRoutes = require('./routes/units');
+const subjectsRoutes = require('./routes/subjects');
+const coursesRoutes = require('./routes/courses');
+const resourcesRoutes = require('./routes/resources');
+const analyticsRoutes = require('./routes/analytics');
+const assignmentsRoutes = require('./routes/assignments');
+const enrollmentRoutes = require('./routes/enrollment');
+const classroomsRoutes = require('./routes/classrooms');
 
-// Load environment variables
-dotenv.config();
+// Environment variables already loaded above
 
 const app = express();
 const prisma = new PrismaClient();
@@ -19,10 +25,20 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Static file serving for uploads
+app.use('/uploads', express.static('uploads'));
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/questions', questionsRoutes);
 app.use('/api/units', unitsRoutes);
+app.use('/api/subjects', subjectsRoutes);
+app.use('/api/courses', coursesRoutes);
+app.use('/api/resources', resourcesRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/assignments', assignmentsRoutes);
+app.use('/api/enrollment', enrollmentRoutes);
+app.use('/api/classrooms', classroomsRoutes);
 
 // Basic route for testing
 app.get('/', (req, res) => {

@@ -2,26 +2,23 @@
 
 ## Project Summary
 
-This project is a full-stack learning platform for English Foundation, supporting:
-- Teacher and student roles with authentication
-- Unit management (create, list)
-- Multiple question types: multiple choice, drag-and-drop, sortable, matching
-- Bulk import of questions (with scoring and feedback JSON)
-- Edit and delete questions from the Teacher Dashboard
-- Student quiz page that supports all question types and displays answers
-- Scoring and feedback fields for future use
-- Comprehensive documentation for setup and usage
-
----
-
-This document outlines the steps to set up the backend, database, and frontend for the English Foundation Learning Platform. It also describes question types, bulk import, and new features for teachers and students.
+This project is a comprehensive full-stack learning platform for English Foundation, supporting:
+- **Multi-school architecture** with organization-based authentication
+- **Teacher and student roles** with role-based access control
+- **Subject and Course management** with hierarchical organization
+- **Resource management** with file uploads (audio, video, PDF, images) and sharing
+- **Assignment system** with multiple question types and auto-scoring
+- **Student analytics** with engagement tracking and persistence monitoring
+- **Modern UI** with Tailwind CSS and responsive design
+- **Process management** with PM2 for production deployment
 
 ---
 
 ## 1. Prerequisites
 - **Node.js** (v16.13 or higher, v22.x recommended)
 - **npm** (v8.x or higher)
-- **PostgreSQL** (v17 recommended)
+- **PostgreSQL** (v16 or higher recommended)
+- **PM2** (for production process management)
 
 ---
 
@@ -31,7 +28,33 @@ This document outlines the steps to set up the backend, database, and frontend f
 ---
 
 ## 3. PostgreSQL Setup
-1. **Install PostgreSQL 17** from https://www.postgresql.org/download/windows/
+
+### Ubuntu/Linux Setup:
+```bash
+# Install PostgreSQL
+sudo apt update
+sudo apt install postgresql postgresql-contrib
+
+# Create custom data directory (optional)
+sudo mkdir -p /mnt/LMS-database/data/postgresql
+sudo chown postgres:postgres /mnt/LMS-database/data/postgresql
+
+# Initialize database cluster
+sudo -u postgres pg_createcluster 16 main /mnt/LMS-database/data/postgresql/main
+
+# Start PostgreSQL
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+
+# Set password for postgres user
+sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'your_password';"
+
+# Create database
+sudo -u postgres createdb english_foundation
+```
+
+### Windows Setup:
+1. **Install PostgreSQL** from https://www.postgresql.org/download/windows/
 2. **Create a new data directory** (optional, for custom location):
    - Example: `D:\PBS\English-Foundation-DB`
 3. **Initialize the database cluster** (if using a custom data directory):
@@ -65,102 +88,220 @@ This document outlines the steps to set up the backend, database, and frontend f
 
 ---
 
-## 5. Install Backend Dependencies
-In the project root, run:
-```sh
+## 5. Install Dependencies
+
+### Backend Dependencies:
+```bash
 npm install
 ```
 
----
+### Frontend Dependencies:
+```bash
+cd frontend
+npm install
+cd ..
+```
 
-## 6. Run Prisma Migrations
-To set up the database tables, run:
-```sh
-npx prisma migrate dev --name init
+### Install PM2 (for production):
+```bash
+sudo npm install -g pm2
 ```
 
 ---
 
-## 7. Start the Backend Server
-In the project root, run:
-```sh
+## 6. Database Setup
+```bash
+# Push schema to database
+npx prisma db push
+
+# Generate Prisma client
+npx prisma generate
+```
+
+---
+
+## 7. Development Mode
+
+### Start Backend:
+```bash
 npm run dev
 ```
-This will start the backend on port 3000.
+
+### Start Frontend (in another terminal):
+```bash
+cd frontend
+npm run dev -- -p 3001
+```
+
+### Access the application:
+- Frontend: `http://localhost:3001`
+- Backend API: `http://localhost:3000`
 
 ---
 
-## 8. Frontend Setup (Next.js + TypeScript)
-1. The frontend is in the `frontend` folder and uses Next.js with TypeScript and ESLint.
-2. Install frontend dependencies:
-   ```sh
-   cd frontend
-   npm install
-   ```
-3. Start the frontend on a different port (e.g., 3001):
-   ```sh
-   npm run dev -- -p 3001
-   ```
-   or
-   ```sh
-   npx next dev -p 3001
-   ```
-4. Access the frontend at `http://localhost:3001/login`.
+## 8. Production Mode with PM2
+
+### Start both applications:
+```bash
+pm2 start ecosystem.config.js
+```
+
+### Useful PM2 commands:
+```bash
+pm2 status                    # Check status
+pm2 logs                      # View logs
+pm2 restart all               # Restart all apps
+pm2 stop all                  # Stop all apps
+pm2 delete all                # Remove all apps
+```
 
 ---
 
-## 9. Question Types & Bulk Import
-- Supported types: `multiple_choice`, `drag_and_drop`, `sortable`, `matching`
-- Each question can have a `scoring` and `feedback` JSON field for future use.
-- Example bulk import JSON:
-  ```json
-  [
-    { "content": "What is 2+2?", "type": "multiple_choice", "options": ["3", "4", "5"], "answer": "4", "unitId": "...", "scoring": {"points": 1}, "feedback": {"correct": "Good!", "incorrect": "Try again."} },
-    { "content": "Arrange the words.", "type": "drag_and_drop", "options": {"items": ["fox", "quick", "the", "brown"], "correctOrder": [2,3,1,0]}, "unitId": "..." }
-  ]
-  ```
+## 9. Features Overview
+
+### Authentication & Organization:
+- **Multi-school support** with organization-based login
+- **Role-based access** (ADMIN, TEACHER, STUDENT)
+- **JWT authentication** with secure token management
+
+### Teacher Dashboard:
+- **Subject Management** - Create and manage subjects
+- **Course Structure** - Create courses with descriptions
+- **Resource Management** - Upload and share resources (audio, video, PDF, images)
+- **Assignment Creation** - Create various question types
+- **Student Analytics** - View engagement and progress data
+- **Bulk Import** - Import questions in JSON format
+
+### Student Features:
+- **Quiz Interface** - Take assignments with various question types
+- **Resource Access** - View and download learning materials
+- **Progress Tracking** - Monitor assignment completion
+
+### Analytics & Tracking:
+- **Session tracking** - Monitor active time and engagement
+- **Activity logging** - Track user interactions and page views
+- **Assignment attempts** - Record completion times and scores
+- **Engagement metrics** - Calculate student engagement scores
 
 ---
 
-## 10. Teacher Features
-- Create, edit, delete, and bulk import questions of any type
-- Add scoring and feedback JSON to questions
+## 10. Question Types Supported
+
+### Auto-Scored Types:
+- **Multiple Choice** (single/multiple answers)
+- **True/False**
+- **Fill-in-the-Blank**
+- **Matching Pairs**
+- **Sequencing/Ordering**
+- **Drag-and-Drop**
+- **Categorization**
+- **Hotspot/Clickable Image**
+- **Connect-the-Dots**
+- **Labeling**
+- **Gap Fill with Word Bank**
+- **Sentence Building**
+
+### Manual Grading Types:
+- **Short Answer**
+- **Audio Recording Upload**
+- **Image Upload**
+- **Video Upload**
+- **Drawing/Annotation**
+- **Open-Ended Essay**
 
 ---
 
-## 11. Student Features
-- Student quiz page: `/student-quiz`
-- Supports all question types
-- Displays student answers after submission
+## 11. Resource Management
+
+### Supported File Types:
+- **Audio**: MP3, WAV, OGG, AAC, MP4 audio
+- **Video**: MP4, WebM, OGG, AVI, MOV
+- **Documents**: PDF
+- **Images**: JPEG, PNG, GIF, WebP, SVG
+
+### Features:
+- **File upload** with progress tracking
+- **Resource sharing** across courses
+- **Metadata tracking** (file size, type, duration)
+- **Public/private visibility** settings
+- **Course/unit association**
 
 ---
 
-## 12. Notes & Troubleshooting
-- **Port Conflicts:** Backend and frontend must run on different ports (e.g., 3000 for backend, 3001 for frontend).
-- **API Base URL:** The frontend's API calls are set to `http://localhost:3000/api` by default. Update this in `frontend/src/api/index.ts` if you change the backend port.
-- **If you see 'Cannot GET /login':** Make sure you are visiting the frontend port, not the backend.
-- **If you see 'address already in use':** Make sure only one server is running on each port.
-- **If you move the project, update the `.env` file with the correct database password and connection details for the new machine.**
+## 12. Analytics System
+
+### Student Analytics:
+- **Session duration** and frequency
+- **Assignment completion rates**
+- **Activity patterns** and user behavior
+- **Engagement scoring** based on multiple factors
+
+### School Analytics:
+- **Overall engagement rates**
+- **Top performing students**
+- **Assignment completion trends**
+- **Resource usage statistics**
 
 ---
 
-## 13. Useful Commands
-- Check Node.js version: `node -v`
-- Check npm version: `npm -v`
-- Check PostgreSQL service: Use `services.msc` or `pg_ctl` commands
+## 13. Troubleshooting
+
+### Common Issues:
+- **Port Conflicts**: Ensure backend (3000) and frontend (3001) use different ports
+- **Database Connection**: Verify PostgreSQL is running and credentials are correct
+- **PM2 Issues**: Check logs with `pm2 logs` and restart if needed
+- **File Uploads**: Ensure `/uploads` directory exists and has proper permissions
+
+### Useful Commands:
+```bash
+# Check Node.js version
+node -v
+
+# Check npm version
+npm -v
+
+# Check PostgreSQL status (Ubuntu)
+sudo systemctl status postgresql
+
+# Check PostgreSQL status (Windows)
+# Use services.msc or pg_ctl commands
+
+# View PM2 logs
+pm2 logs
+
+# Restart specific app
+pm2 restart english-foundation-backend
+pm2 restart english-foundation-frontend
+```
 
 ---
 
-## Next Steps
-- Push your code to GitHub:
-  ```sh
-  git init
-  git remote add origin https://github.com/PeterNoelEvans/English-Foundation-Adventure.git
-  git add .
-  git commit -m "Initial commit with full backend/frontend, question types, and docs"
-  git branch -M main
-  git push -u origin main
-  ```
-- Deploy to your preferred platform (Vercel, Heroku, etc.)
-- Continue building advanced features (real-time scoring, analytics, more interactive UIs)
-- For help, refer to the README or contact the project maintainer. 
+## 14. Deployment
+
+### GitHub Setup:
+```bash
+git init
+git remote add origin https://github.com/PeterNoelEvans/English-Foundation-Adventure.git
+git add .
+git commit -m "Initial commit with comprehensive features"
+git branch -M main
+git push -u origin main
+```
+
+### Production Considerations:
+- **Environment variables** - Set production DATABASE_URL and JWT_SECRET
+- **SSL certificates** - Configure HTTPS for production
+- **Database backups** - Set up regular PostgreSQL backups
+- **Monitoring** - Use PM2 monitoring or external services
+- **File storage** - Consider cloud storage for uploads in production
+
+---
+
+## 15. Next Steps
+- **Assignment Types**: Implement additional question types as needed
+- **AI Integration**: Add AI-powered scoring for open-ended responses
+- **Real-time Features**: Add live collaboration and chat features
+- **Mobile App**: Develop React Native mobile application
+- **Advanced Analytics**: Implement predictive analytics and insights
+
+For help, refer to the README or contact the project maintainer. 

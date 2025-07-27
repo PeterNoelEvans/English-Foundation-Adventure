@@ -1,4 +1,5 @@
-// Robust Multi-School LMS Prisma Schema
+// Future-Proof Multi-Organization LMS Prisma Schema
+// Supports: Multi-tenancy, Classroom structure, Assessment banks, Multiple resources, Session tracking
 
 generator client {
   provider = "prisma-client-js"
@@ -9,94 +10,492 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model School {
-  id        String   @id @default(uuid())
-  name      String
-  code      String   @unique // For URL routing or selection
-  logo      String?
+// ============================================================================
+// CORE ORGANIZATION & STRUCTURE
+// ============================================================================
+
+model Organization {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String   @unique // e.g., "PBS", "HOSPITAL", "CODING"
+  domain      String?  // e.g., "pbs.yourdomain.com"
+  logo        String?
   primaryColor String?
   secondaryColor String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  users     User[]
-  courses   Course[]
-  units     Unit[]
-  assignments Assignment[]
+  // Relationships
+  users       User[]
+  classrooms  Classroom[]
+  subjects    Subject[]
+  configs     Config[]
+
+  @@map("organizations")
 }
+
+model Classroom {
+  id          String   @id @default(uuid())
+  yearLevel   String   // e.g., "P1", "P2", ..., "P6", "M1", ..., "M6"
+  classNum    String   // e.g., "1", "2", ..., "6"
+  name        String   // e.g., "Primary 1 Class 1"
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  students       User[]
+  courses        Course[]
+
+  @@unique([organizationId, yearLevel, classNum])
+  @@map("classrooms")
+}
+
+// ============================================================================
+// USER MANAGEMENT
+// ============================================================================
 
 model User {
-  id        String   @id @default(uuid())
-  email     String
-  password  String
-  role      String   // ADMIN, TEACHER, STUDENT, etc.
-  firstName String?
-  lastName  String?
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(uuid())
+  email       String
+  password    String
+  role        String   // ADMIN, TEACHER, STUDENT, PARENT
+  firstName   String?
+  lastName    String?
+  nickname    String?
+  studentNumber Int?   @unique // 5-digit student ID
+  active      Boolean  @default(true)
+  lastLogin   DateTime?
+  resetToken  String?
+  resetTokenExpiry DateTime?
+  profilePicture String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  school    School   @relation(fields: [schoolId], references: [id])
-  schoolId  String
+  // Relationships
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  classroomId    String?
+  classroom      Classroom? @relation(fields: [classroomId], references: [id])
+  
+  // Session tracking
+  sessions       UserSession[]
+  
+  // Content creation
+  createdSubjects Subject[] @relation("SubjectCreator")
+  createdCourses  Course[] @relation("CourseCreator")
+  createdAssessments Assessment[] @relation("AssessmentCreator")
+  createdResources Resource[] @relation("ResourceCreator")
+  
+  // Student progress and activities
+  studentProgress StudentProgress[]
+  studentCourses  StudentCourse[]
+  assessmentSubmissions AssessmentSubmission[]
+  resourceUsage   ResourceUsage[]
+  
+  // Parent-child relationships
+  parentId    String?
+  parent      User? @relation("ParentChild", fields: [parentId], references: [id])
+  children    User[] @relation("ParentChild")
 
-  assignmentsCreated Assignment[] @relation("AssignmentCreatedBy")
+  // Teacher assignments
+  subjectTeachers SubjectTeacher[]
 
-  @@unique([email, schoolId])
+  @@unique([email, organizationId])
+  @@map("users")
 }
 
-model CoreSubject {
-  id        String   @id @default(uuid())
-  name      String   @unique
-  courses   Course[]
+model UserSession {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startTime   DateTime @default(now())
+  endTime     DateTime? // null if session is still active
+  duration    Int?     // Duration in seconds (calculated when session ends)
+  lastActive  DateTime @default(now()) // For heartbeat/ping tracking
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId, startTime])
+  @@index([startTime])
+  @@index([lastActive])
+  @@map("user_sessions")
+}
+
+// ============================================================================
+// COURSE STRUCTURE
+// ============================================================================
+
+model Subject {
+  id          String   @id @default(uuid())
+  name        String   // The subject name (e.g., "English", "Mathematics", "Science")
+  description String?
+  isArchived  Boolean  @default(false)
+  archivedAt  DateTime?
+  archiveReason String?
+  transferredAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  createdById    String
+  createdBy      User @relation("SubjectCreator", fields: [createdById], references: [id])
+  
+  // Course structure
+  courses      Course[]
+  
+  // Resources
+  resources    Resource[]
+  
+  // Teacher assignments
+  subjectTeachers SubjectTeacher[]
+
+  @@unique([organizationId, name])
+  @@map("subjects")
 }
 
 model Course {
-  id            String      @id @default(uuid())
-  name          String
-  coreSubject   CoreSubject @relation(fields: [coreSubjectId], references: [id])
-  coreSubjectId String
-  school        School      @relation(fields: [schoolId], references: [id])
-  schoolId      String
-  units         Unit[]
-  assignments   Assignment[]
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id          String   @id @default(uuid())
+  name        String   // The course name (e.g., "Project Explore 2", "Let's Find Out")
+  description String?
+  isArchived  Boolean  @default(false)
+  archivedAt  DateTime?
+  archiveReason String?
+  transferredAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  @@unique([name, schoolId])
+  // Relationships
+  subjectId   String
+  subject     Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User @relation("CourseCreator", fields: [createdById], references: [id])
+  
+  // Course structure
+  units       Unit[]
+  topics      Topic[]
+  
+  // Classroom assignments
+  classrooms  Classroom[]
+  
+  // Student relationships
+  studentProgress StudentProgress[]
+  studentCourses  StudentCourse[]
+  
+  // Resources and assessments
+  resources   Resource[]
+  assessments Assessment[]
+
+  // Terminology configuration
+  unitTerm      String @default("Unit")      // e.g., "Unit", "Chapter", "Module"
+  partTerm      String @default("Part")      // e.g., "Lesson", "Topic", "Session"
+  sectionTerm   String @default("Section")   // e.g., "Activity", "Exercise", "Task"
+
+  @@unique([subjectId, name])
+  @@map("courses")
 }
 
 model Unit {
-  id        String   @id @default(uuid())
-  name      String
-  course    Course   @relation(fields: [courseId], references: [id])
-  courseId  String
-  school    School   @relation(fields: [schoolId], references: [id])
-  schoolId  String
-  assignments Assignment[]
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  order       Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  courseId    String
+  course      Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  parts       Part[]
+  resources   Resource[]
+  assessments Assessment[]
+
+  @@map("units")
+}
+
+model Part {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  order       Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  unitId      String
+  unit        Unit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  sections    Section[]
+  resources   Resource[]
+  assessments Assessment[]
+
+  @@map("parts")
+}
+
+model Section {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  order       Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  partId      String
+  part        Part @relation(fields: [partId], references: [id], onDelete: Cascade)
+  assessments Assessment[]
+  resources   Resource[]
+
+  @@map("sections")
+}
+
+model Topic {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  order       Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  courseId    String
+  course      Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  resources   Resource[]
+  assessments Assessment[]
+  studentProgress StudentProgress[]
+
+  @@map("topics")
+}
+
+// ============================================================================
+// RESOURCES & MEDIA
+// ============================================================================
+
+model Resource {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  type        String   // 'document', 'video', 'audio', 'link', 'poster', 'image'
+  url         String?  // For external links, videos, and audio
+  content     String?  // For HTML content
+  filePath    String?  // For uploaded files
+  fileSize    Int?     // File size in bytes
+  mimeType    String?  // MIME type of the file
+  thumbnail   String?  // For video thumbnails or poster previews
+  duration    Int?     // For audio/video duration in seconds
+  label       String?  // For robust linking (e.g., "audio_0", "image_1")
+  order       Int      @default(0) // Order for sequencing
+  usageCount  Int      @default(0)
+  isShared    Boolean  @default(false) // Whether this is a shared template
+  isPublic    Boolean  @default(false) // Whether this is publicly accessible
+  tags        String[] @default([]) // Tags for categorization
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  createdById String
+  createdBy   User @relation("ResourceCreator", fields: [createdById], references: [id])
+  
+  // Subject relationship
+  subjectId   String?
+  subject     Subject? @relation(fields: [subjectId], references: [id])
+  
+  // Course structure relationships
+  courseId    String?
+  course      Course? @relation(fields: [courseId], references: [id])
+  unitId      String?
+  unit        Unit? @relation(fields: [unitId], references: [id])
+  partId      String?
+  part        Part? @relation(fields: [partId], references: [id])
+  sectionId   String?
+  section     Section? @relation(fields: [sectionId], references: [id])
+  topicId     String?
+  topic       Topic? @relation(fields: [topicId], references: [id])
+  
+  // Assessment relationships
+  assessments Assessment[]
+  
+  // Usage tracking
+  usedBy      ResourceUsage[]
+
+  @@map("resources")
+}
+
+model ResourceUsage {
+  id         String   @id @default(uuid())
+  resourceId String
+  resource   Resource @relation(fields: [resourceId], references: [id])
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  usedAt     DateTime @default(now())
+  
+  @@unique([resourceId, userId])
+  @@map("resource_usage")
+}
+
+// ============================================================================
+// ASSESSMENTS & EVALUATION
+// ============================================================================
+
+model Assessment {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  type        String   // 'quiz', 'matching', 'drag_and_drop', 'sortable', 'assignment'
+  category    String?  // e.g., 'Grammar', 'Listening', 'Speaking', etc.
+  criteria    String?  // Grading criteria/rubric for manually graded assessments
+  questions   Json?    // For quizzes and interactive assessments
+  dueDate     DateTime? // For assignments
+  quarter     String   @default("Q1") // "Q1", "Q2", "Q3", "Q4"
+  published   Boolean  @default(true)
+  maxAttempts Int?     // Maximum allowed attempts (null = unlimited)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  createdById String
+  createdBy   User @relation("AssessmentCreator", fields: [createdById], references: [id])
+  
+  // Assignment relationships (nullable for assessment bank/drafts)
+  courseId    String?
+  course      Course? @relation(fields: [courseId], references: [id])
+  unitId      String?
+  unit        Unit? @relation(fields: [unitId], references: [id])
+  partId      String?
+  part        Part? @relation(fields: [partId], references: [id])
+  sectionId   String?
+  section     Section? @relation(fields: [sectionId], references: [id])
+  topicId     String?
+  topic       Topic? @relation(fields: [topicId], references: [id])
+  
+  // Resources and media
+  resources   Resource[]
+  mediaFiles  MediaFile[]
+  
+  // Submissions
+  submissions AssessmentSubmission[]
+
+  @@map("assessments")
+}
+
+model MediaFile {
+  id            String     @id @default(uuid())
+  type          String     // 'audio', 'video', 'image'
+  url           String?    // For external media
+  filePath      String?    // For uploaded files
+  duration      Int?       // For audio/video duration in seconds
+  label         String?    // Original field name or label for robust linking
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  // Relationships
+  assessmentId  String
+  assessment    Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  @@map("media_files")
+}
+
+model AssessmentSubmission {
+  id           String   @id @default(uuid())
+  answers      Json?    // Student's answers
+  comment      String?  // Teacher feedback/comment for manually graded assessments
+  score        Float?
+  submittedAt  DateTime @default(now())
+  attempts     Int?     // Total number of attempts
+  totalTime    Int?     // Accumulative time in seconds
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relationships
+  assessmentId String
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  studentId    String
+  student      User @relation(fields: [studentId], references: [id])
+
+  @@unique([assessmentId, studentId])
+  @@map("assessment_submissions")
+}
+
+// ============================================================================
+// STUDENT PROGRESS & COURSES
+// ============================================================================
+
+model StudentProgress {
+  id          String   @id @default(uuid())
+  status      String   // 'NOT_STARTED', 'IN_PROGRESS', 'COMPLETED'
+  score       Float?
+  lastUpdated DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  studentId   String
+  student     User @relation(fields: [studentId], references: [id])
+  courseId    String
+  course      Course @relation(fields: [courseId], references: [id])
+  topicId     String
+  topic       Topic @relation(fields: [topicId], references: [id])
+
+  @@unique([studentId, courseId, topicId])
+  @@map("student_progress")
+}
+
+model StudentCourse {
+  id        String   @id @default(cuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([name, courseId, schoolId])
+  // Relationships
+  studentId String
+  student   User @relation(fields: [studentId], references: [id])
+  courseId  String
+  course    Course @relation(fields: [courseId], references: [id])
+
+  @@unique([studentId, courseId])
+  @@map("student_courses")
 }
 
-model Assignment {
-  id          String   @id @default(uuid())
-  title       String
-  type        String
-  data        Json?
-  isShared    Boolean  @default(false)
-  templateId  String?
-  template    Assignment? @relation("AssignmentTemplate", fields: [templateId], references: [id])
-  copies      Assignment[] @relation("AssignmentTemplate")
-  unit        Unit?    @relation(fields: [unitId], references: [id])
-  unitId      String?
-  course      Course?  @relation(fields: [courseId], references: [id])
-  courseId    String?
-  school      School   @relation(fields: [schoolId], references: [id])
-  schoolId    String
-  createdBy   User     @relation("AssignmentCreatedBy", fields: [createdById], references: [id])
-  createdById String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+// ============================================================================
+// TEACHER ASSIGNMENTS
+// ============================================================================
+
+model SubjectTeacher {
+  id            String    @id @default(uuid())
+  isActive      Boolean   @default(true)
+  role          String    @default("EDITOR")  // EDITOR, VIEWER, OWNER
+  assignedAt    DateTime  @default(now())
+  removedAt     DateTime?
+  removeReason  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relationships
+  subjectId     String
+  subject       Subject @relation(fields: [subjectId], references: [id])
+  teacherId     String
+  teacher       User @relation(fields: [teacherId], references: [id])
+
+  @@unique([subjectId, teacherId])
+  @@map("subject_teachers")
+}
+
+// ============================================================================
+// SYSTEM CONFIGURATION
+// ============================================================================
+
+model Config {
+  id    Int    @id @default(1)
+  key   String @unique
+  value String
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  @@map("configs")
 } 
