@@ -31,6 +31,8 @@ model Organization {
   classrooms  Classroom[]
   subjects    Subject[]
   configs     Config[]
+  chatRooms   ChatRoom[]
+  auditLogs   AuditLog[] @relation("AuditOrganization")
 
   @@map("organizations")
 }
@@ -104,6 +106,13 @@ model User {
 
   // Teacher assignments
   subjectTeachers SubjectTeacher[]
+  
+  // Chat relationships
+  chatParticipants ChatParticipant[]
+  sentMessages     ChatMessage[]
+  
+  // Audit logging
+  auditLogs        AuditLog[] @relation("AuditUser")
 
   @@unique([email, organizationId])
   @@map("users")
@@ -119,6 +128,10 @@ model UserSession {
   lastActive  DateTime @default(now()) // For heartbeat/ping tracking
   ipAddress   String?
   userAgent   String?
+  // Mobile detection fields
+  isMobile    Boolean? // Detected mobile device
+  screenFocus Boolean? // Whether app was in focus
+  appSwitches Int?     // Number of app switches detected
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -349,7 +362,7 @@ model Assessment {
   title       String
   description String?
   type        String   // Assessment type: 'multiple-choice', 'true-false', 'matching', 'drag-and-drop', 'writing', 'writing-long', 'speaking', 'assignment', 'listening'
-  subtype     String?  // For drag-and-drop: 'ordering', 'categorization', 'fill-blank', 'labeling'
+  subtype     String?  // For drag-and-drop: 'ordering', 'categorization', 'fill-blank', 'labeling', 'image-caption'
   category    String?  // e.g., 'Grammar', 'Listening', 'Speaking', 'Vocabulary', etc.
   difficulty  String?  // 'beginner', 'intermediate', 'advanced'
   timeLimit   Int?     // Time limit in minutes (null = no limit)
@@ -378,6 +391,20 @@ model Assessment {
   
   // Metadata
   tags        String[] // Array of tags for categorization
+  
+  // Engagement tracking and recommendations
+  trackAttempts      Boolean @default(true) // Track number of attempts per question
+  trackConfidence    Boolean @default(true) // Track confidence level from attempt patterns
+  trackTimeSpent     Boolean @default(true) // Track time spent on each question
+  engagementDeadline Int?    // Time limit for homework completion (hours, null = no deadline)
+  lateSubmissionPenalty Int? // Score reduction percentage for late submissions
+  negativeScoreThreshold Int? // Threshold for automatic course recommendations
+  recommendedCourses String[] // Array of recommended course names for struggling students
+  prerequisites      String[] // Array of prerequisite assignment IDs
+  recommendations    Json?    // Complex recommendation structure
+  difficultyLevel    String?  // 'beginner', 'intermediate', 'advanced', 'expert'
+  learningObjectives String[] // Array of learning objectives
+  
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -543,4 +570,83 @@ model Config {
   organization   Organization? @relation(fields: [organizationId], references: [id])
 
   @@map("configs")
+}
+
+// ============================================================================
+// CHAT SYSTEM
+// ============================================================================
+
+model ChatRoom {
+  id          String   @id @default(uuid())
+  name        String?  // Optional name for group chats
+  type        String   // "direct", "group", "class"
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  participants   ChatParticipant[]
+  messages      ChatMessage[]
+
+  @@map("chat_rooms")
+}
+
+model ChatParticipant {
+  id          String   @id @default(uuid())
+  role        String   // "student", "teacher", "admin"
+  isActive    Boolean  @default(true)
+  joinedAt    DateTime @default(now())
+  leftAt      DateTime?
+
+  // Relationships
+  userId      String
+  user        User @relation(fields: [userId], references: [id])
+  chatRoomId  String
+  chatRoom    ChatRoom @relation(fields: [chatRoomId], references: [id])
+
+  @@unique([userId, chatRoomId])
+  @@map("chat_participants")
+}
+
+model ChatMessage {
+  id          String   @id @default(uuid())
+  content     String
+  messageType String   @default("text") // "text", "file", "image", "system"
+  isRead      Boolean  @default(false)
+  isEdited    Boolean  @default(false)
+  editedAt    DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  senderId    String
+  sender      User @relation(fields: [senderId], references: [id])
+  chatRoomId  String
+  chatRoom    ChatRoom @relation(fields: [chatRoomId], references: [id])
+  replyToId   String?
+  replyTo     ChatMessage? @relation("MessageReplies", fields: [replyToId], references: [id])
+  replies     ChatMessage[] @relation("MessageReplies")
+
+  @@map("chat_messages")
+}
+
+// ============================================================================
+// AUDIT LOGGING
+// ============================================================================
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  action        String   // e.g., "RESOURCE_CLONED", "USER_CREATED", "ASSESSMENT_DELETED"
+  userId        String
+  user          User     @relation("AuditUser", fields: [userId], references: [id])
+  organizationId String
+  organization  Organization @relation("AuditOrganization", fields: [organizationId], references: [id])
+  details       Json     // Flexible JSON object for action-specific details
+  timestamp     DateTime @default(now())
+  ipAddress     String?
+  userAgent     String?
+
+  @@map("audit_logs")
 } 

@@ -5,7 +5,8 @@ import { useRouter } from 'next/router';
 const organizations = {
   pbs: { name: 'PBS', color: 'green', bgColor: 'bg-green-500' },
   hospital: { name: 'Hospital', color: 'blue', bgColor: 'bg-blue-500' },
-  'coding-school': { name: 'Coding School', color: 'purple', bgColor: 'bg-purple-500' }
+  'coding-school': { name: 'Coding School', color: 'purple', bgColor: 'bg-purple-500' },
+  'my-school': { name: 'My School', color: 'indigo', bgColor: 'bg-indigo-500' }
 };
 
 const Register: React.FC = () => {

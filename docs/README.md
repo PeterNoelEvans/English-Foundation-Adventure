@@ -49,6 +49,8 @@ This LMS is designed for multi-organization, classroom-based learning with robus
 - **Session tracking uses a heartbeat endpoint and auto-expiry for reliability.**
 - **Resources are always arrays, never single files.**
 - **Assessment bank supports unattached/draft assessments.**
+- **Superuser configuration:** add `SUPERUSER_EMAILS` in `.env` (comma-separated) or use `ADMIN` role to access `/superuser/organizations`.
+- **Uploads layout:** resources at `uploads/resources/<organizationId>/<year>/...`; org logos at `uploads/org-logos/<organizationId>/<year>/...` (served under `/uploads/...`).
 - **Course structure is hierarchical and supports automation/import.**
 
 ---

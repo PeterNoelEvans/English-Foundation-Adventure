@@ -12,10 +12,40 @@ if ! command -v pm2 &> /dev/null; then
     npm install -g pm2
 fi
 
-# Stop any existing PM2 processes
-echo "🛑 Stopping any existing PM2 processes..."
+# Comprehensive cleanup - stop all existing processes
+echo "🛑 Performing comprehensive cleanup..."
+echo "  - Stopping PM2 processes..."
 pm2 stop all 2>/dev/null || true
 pm2 delete all 2>/dev/null || true
+
+echo "  - Stopping Next.js processes..."
+pkill -f "next dev" 2>/dev/null || true
+pkill -f "npm run dev" 2>/dev/null || true
+pkill -f "next-server" 2>/dev/null || true
+
+echo "  - Stopping Node.js server processes..."
+pkill -f "node.*server.js" 2>/dev/null || true
+
+echo "  - Force killing any remaining processes..."
+pkill -9 -f "next dev" 2>/dev/null || true
+pkill -9 -f "node.*server.js" 2>/dev/null || true
+
+# Wait a moment for processes to fully stop
+sleep 2
+
+# Check if ports are free
+echo "🔍 Checking port availability..."
+if lsof -i :3000 > /dev/null 2>&1; then
+    echo "⚠️  Port 3000 is still in use. Force killing processes on port 3000..."
+    lsof -ti :3000 | xargs kill -9 2>/dev/null || true
+    sleep 1
+fi
+
+if lsof -i :3001 > /dev/null 2>&1; then
+    echo "⚠️  Port 3001 is still in use. Force killing processes on port 3001..."
+    lsof -ti :3001 | xargs kill -9 2>/dev/null || true
+    sleep 1
+fi
 
 # Start backend with PM2
 echo "🔧 Starting backend server..."
@@ -54,21 +84,33 @@ npm run dev &
 # Wait a moment for frontend to start
 sleep 5
 
+# Start Cloudflare tunnel
+echo "🌍 Starting Cloudflare tunnel..."
+cd ..
+cloudflared tunnel run --token eyJhIjoiMTlmY2NkODg1MzVkNzZmNzhmOTBiYzFhNDlmZGNlMDMiLCJ0IjoiM2M2N2ZmYjMtOGM2Zi00MzE5LWJiM2ItZTU1NjMwYWQ4MDM4IiwicyI6Ik5EVXhOamswTWpRdFl6STBOaTAwWWpaakxUaG1ZMk10WXpOak0yWXdaRE00TW1ReCJ9 &
+TUNNEL_PID=$!
+
+# Wait for tunnel to start
+sleep 3
+
 echo ""
 echo "🎉 Servers are starting..."
 echo "================================================"
 echo "🔧 Backend: http://localhost:3000"
 echo "🌐 Frontend: Check terminal output for port (usually 3000, 3001, or 3002)"
+echo "🌍 Tunnel: https://lms-pne.uk"
 echo ""
 echo "📋 Useful commands:"
 echo "  Check backend status: pm2 status"
 echo "  View backend logs: pm2 logs english-foundation-backend"
 echo "  Stop backend: pm2 stop english-foundation-backend"
 echo "  Stop frontend: Ctrl+C in this terminal"
+echo "  Stop tunnel: pkill -f cloudflared"
 echo ""
 echo "🔍 To verify everything is working:"
-echo "  1. Open your browser and go to the frontend URL"
+echo "  1. Open your browser and go to https://lms-pne.uk"
 echo "  2. You should see the login page"
 echo "  3. Try logging in to verify backend connectivity"
+echo "  4. Test registration from another computer"
 echo ""
 echo "✅ Startup complete!" 

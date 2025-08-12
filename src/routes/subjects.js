@@ -89,10 +89,7 @@ router.post(
 // List all subjects for the user's organization
 router.get('/', auth, requireRole(['TEACHER']), async (req, res) => {
   try {
-    console.log('User organizationId:', req.user.organizationId);
-    console.log('User ID:', req.user.id);
-    console.log('User role:', req.user.role);
-    
+    // Get subjects filtered by user's organization
     const subjects = await prisma.subject.findMany({
       where: {
         organizationId: req.user.organizationId

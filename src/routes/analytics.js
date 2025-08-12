@@ -34,7 +34,11 @@ router.post('/session/start', auth, requireRole(['STUDENT']), [
         studentId: req.user.userId,
         schoolId: student.schoolId,
         sessionType,
-        metadata: metadata || {}
+        metadata: metadata || {},
+        // Mobile detection
+        isMobile: req.headers['user-agent']?.includes('Mobile') || false,
+        screenFocus: true,
+        appSwitches: 0
       }
     });
 
@@ -82,6 +86,42 @@ router.patch('/session/:sessionId/end', auth, requireRole(['STUDENT']), async (r
     });
   } catch (error) {
     console.error('Session end error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Track app focus/blur events (for mobile detection)
+router.post('/focus', auth, requireRole(['STUDENT']), [
+  body('sessionId').notEmpty().withMessage('Session ID is required'),
+  body('isFocused').isBoolean().withMessage('Focus state must be boolean'),
+  body('timestamp').optional()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { sessionId, isFocused, timestamp } = req.body;
+
+    // Update session with focus state
+    await prisma.studentSession.update({
+      where: { 
+        id: sessionId,
+        studentId: req.user.userId
+      },
+      data: {
+        screenFocus: isFocused,
+        appSwitches: {
+          increment: isFocused ? 0 : 1 // Increment switch count when app loses focus
+        },
+        lastActive: timestamp ? new Date(timestamp) : new Date()
+      }
+    });
+
+    res.json({ message: 'Focus state updated' });
+  } catch (error) {
+    console.error('Focus tracking error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -157,6 +197,10 @@ router.post('/assignment/start', auth, requireRole(['STUDENT']), [
     }
 
     // Check if assignment exists and belongs to student's school
+    // TEMPORARILY DISABLED - Assignment model doesn't exist
+    return res.status(501).json({ message: 'Assignment tracking temporarily disabled' });
+    
+    /*
     const assignment = await prisma.assignment.findFirst({
       where: { 
         id: assignmentId,
@@ -167,9 +211,10 @@ router.post('/assignment/start', auth, requireRole(['STUDENT']), [
     if (!assignment) {
       return res.status(404).json({ message: 'Assignment not found' });
     }
+    */
 
     // Check if attempt already exists
-    const existingAttempt = await prisma.assignmentAttempt.findUnique({
+    const existingAttempt = await prisma.assessmentSubmission.findUnique({
       where: {
         studentId_assignmentId: {
           studentId: req.user.userId,
@@ -265,6 +310,512 @@ router.patch('/assignment/:attemptId/complete', auth, requireRole(['STUDENT']), 
   }
 });
 
+// Get progress vs time spent report
+router.get('/student/:studentId/progress-time-report', auth, requireRole(['TEACHER', 'ADMIN']), async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const { period = '30d', groupBy = 'assignment' } = req.query; // groupBy: 'assignment', 'week', 'month'
+
+    const teacher = await prisma.user.findUnique({
+      where: { id: req.user.userId },
+      select: { organizationId: true }
+    });
+
+    if (!teacher) {
+      return res.status(404).json({ message: 'Teacher not found' });
+    }
+
+    // Verify student belongs to teacher's organization
+    const student = await prisma.user.findFirst({
+      where: { 
+        id: studentId,
+        organizationId: teacher.organizationId,
+        role: 'STUDENT'
+      }
+    });
+
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    // Calculate date range
+    const now = new Date();
+    let startDate = new Date();
+    
+    switch (period) {
+      case '7d':
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case '30d':
+        startDate.setDate(now.getDate() - 30);
+        break;
+      case '90d':
+        startDate.setDate(now.getDate() - 90);
+        break;
+      default:
+        startDate.setDate(now.getDate() - 30);
+    }
+
+    // Get all assignment submissions with timing data
+    const submissions = await prisma.assessmentSubmission.findMany({
+      where: {
+        studentId,
+        startedAt: {
+          gte: startDate
+        },
+        status: 'COMPLETED' // Only completed assignments for accurate analysis
+      },
+      include: {
+        assessment: {
+          select: {
+            id: true,
+            title: true,
+            type: true,
+            difficulty: true,
+            points: true,
+            category: true
+          }
+        }
+      },
+      orderBy: { startedAt: 'asc' }
+    });
+
+    // Calculate progress vs time metrics
+    const progressTimeData = submissions.map(submission => {
+      const timeSpentMinutes = submission.timeSpent ? submission.timeSpent / 60 : 0;
+      const scorePercentage = submission.percentage || 0;
+      const efficiency = timeSpentMinutes > 0 ? scorePercentage / timeSpentMinutes : 0; // Score per minute
+      
+      return {
+        assignmentId: submission.assessmentId,
+        assignmentTitle: submission.assessment.title,
+        assignmentType: submission.assessment.type,
+        difficulty: submission.assessment.difficulty,
+        category: submission.assessment.category,
+        startedAt: submission.startedAt,
+        submittedAt: submission.submittedAt,
+        timeSpentMinutes: Math.round(timeSpentMinutes * 100) / 100,
+        timeSpentSeconds: submission.timeSpent,
+        score: submission.score,
+        scorePercentage: Math.round(scorePercentage * 100) / 100,
+        efficiency: Math.round(efficiency * 100) / 100, // Score per minute
+        maxScore: submission.maxScore,
+        points: submission.assessment.points
+      };
+    });
+
+    // Group data based on request
+    let groupedData;
+    if (groupBy === 'week') {
+      groupedData = groupByWeek(progressTimeData);
+    } else if (groupBy === 'month') {
+      groupedData = groupByMonth(progressTimeData);
+    } else {
+      // Default: group by assignment
+      groupedData = groupByAssignment(progressTimeData);
+    }
+
+    // Calculate overall trends
+    const overallTrends = calculateOverallTrends(progressTimeData);
+
+    // Generate efficiency insights
+    const efficiencyInsights = generateEfficiencyInsights(progressTimeData);
+
+    const report = {
+      student: {
+        id: student.id,
+        name: `${student.firstName} ${student.lastName}`,
+        email: student.email
+      },
+      period: {
+        start: startDate,
+        end: now,
+        days: Math.ceil((now - startDate) / (1000 * 60 * 60 * 24))
+      },
+      summary: {
+        totalAssignments: submissions.length,
+        totalTimeSpent: Math.round(progressTimeData.reduce((sum, item) => sum + item.timeSpentMinutes, 0) * 100) / 100,
+        averageScore: Math.round(progressTimeData.reduce((sum, item) => sum + item.scorePercentage, 0) / progressTimeData.length * 100) / 100,
+        averageEfficiency: Math.round(progressTimeData.reduce((sum, item) => sum + item.efficiency, 0) / progressTimeData.length * 100) / 100,
+        bestEfficiency: Math.max(...progressTimeData.map(item => item.efficiency)),
+        worstEfficiency: Math.min(...progressTimeData.map(item => item.efficiency))
+      },
+      trends: overallTrends,
+      insights: efficiencyInsights,
+      detailedData: groupedData,
+      rawData: progressTimeData // For detailed analysis
+    };
+
+    res.json({ progressTimeReport: report });
+  } catch (error) {
+    console.error('Progress time report error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Helper function to group by assignment
+function groupByAssignment(data) {
+  return data.map(item => ({
+    group: item.assignmentTitle,
+    data: [item],
+    summary: {
+      totalTime: item.timeSpentMinutes,
+      averageScore: item.scorePercentage,
+      efficiency: item.efficiency,
+      type: item.assignmentType,
+      difficulty: item.difficulty
+    }
+  }));
+}
+
+// Helper function to group by week
+function groupByWeek(data) {
+  const weeks = {};
+  
+  data.forEach(item => {
+    const weekStart = getWeekStart(item.startedAt);
+    const weekKey = weekStart.toISOString().split('T')[0];
+    
+    if (!weeks[weekKey]) {
+      weeks[weekKey] = [];
+    }
+    weeks[weekKey].push(item);
+  });
+
+  return Object.entries(weeks).map(([week, items]) => ({
+    group: week,
+    data: items,
+    summary: {
+      totalTime: Math.round(items.reduce((sum, item) => sum + item.timeSpentMinutes, 0) * 100) / 100,
+      averageScore: Math.round(items.reduce((sum, item) => sum + item.scorePercentage, 0) / items.length * 100) / 100,
+      averageEfficiency: Math.round(items.reduce((sum, item) => sum + item.efficiency, 0) / items.length * 100) / 100,
+      assignmentCount: items.length
+    }
+  }));
+}
+
+// Helper function to group by month
+function groupByMonth(data) {
+  const months = {};
+  
+  data.forEach(item => {
+    const monthKey = `${item.startedAt.getFullYear()}-${String(item.startedAt.getMonth() + 1).padStart(2, '0')}`;
+    
+    if (!months[monthKey]) {
+      months[monthKey] = [];
+    }
+    months[monthKey].push(item);
+  });
+
+  return Object.entries(months).map(([month, items]) => ({
+    group: month,
+    data: items,
+    summary: {
+      totalTime: Math.round(items.reduce((sum, item) => sum + item.timeSpentMinutes, 0) * 100) / 100,
+      averageScore: Math.round(items.reduce((sum, item) => sum + item.scorePercentage, 0) / items.length * 100) / 100,
+      averageEfficiency: Math.round(items.reduce((sum, item) => sum + item.efficiency, 0) / items.length * 100) / 100,
+      assignmentCount: items.length
+    }
+  }));
+}
+
+// Helper function to get week start
+function getWeekStart(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+  return new Date(d.setDate(diff));
+}
+
+// Helper function to calculate overall trends
+function calculateOverallTrends(data) {
+  if (data.length < 2) return { trend: 'insufficient_data' };
+
+  const sortedData = data.sort((a, b) => new Date(a.startedAt) - new Date(b.startedAt));
+  const halfPoint = Math.floor(sortedData.length / 2);
+  
+  const firstHalf = sortedData.slice(0, halfPoint);
+  const secondHalf = sortedData.slice(halfPoint);
+
+  const firstHalfAvgEfficiency = firstHalf.reduce((sum, item) => sum + item.efficiency, 0) / firstHalf.length;
+  const secondHalfAvgEfficiency = secondHalf.reduce((sum, item) => sum + item.efficiency, 0) / secondHalf.length;
+
+  const efficiencyChange = secondHalfAvgEfficiency - firstHalfAvgEfficiency;
+  
+  return {
+    efficiencyTrend: efficiencyChange > 0.5 ? 'improving' : efficiencyChange < -0.5 ? 'declining' : 'stable',
+    efficiencyChange: Math.round(efficiencyChange * 100) / 100,
+    firstHalfEfficiency: Math.round(firstHalfAvgEfficiency * 100) / 100,
+    secondHalfEfficiency: Math.round(secondHalfAvgEfficiency * 100) / 100
+  };
+}
+
+// Helper function to generate efficiency insights
+function generateEfficiencyInsights(data) {
+  const insights = [];
+  
+  if (data.length === 0) {
+    insights.push('No completed assignments in this period');
+    return insights;
+  }
+
+  // Find most efficient assignment
+  const mostEfficient = data.reduce((max, item) => item.efficiency > max.efficiency ? item : max);
+  insights.push(`Most efficient: ${mostEfficient.assignmentTitle} (${mostEfficient.efficiency} score/min)`);
+
+  // Find least efficient assignment
+  const leastEfficient = data.reduce((min, item) => item.efficiency < min.efficiency ? item : min);
+  insights.push(`Least efficient: ${leastEfficient.assignmentTitle} (${leastEfficient.efficiency} score/min)`);
+
+  // Time analysis
+  const avgTime = data.reduce((sum, item) => sum + item.timeSpentMinutes, 0) / data.length;
+  if (avgTime > 45) {
+    insights.push('Student tends to spend a lot of time on assignments - may need time management help');
+  } else if (avgTime < 10) {
+    insights.push('Student completes assignments very quickly - may need more challenging content');
+  }
+
+  // Score analysis
+  const avgScore = data.reduce((sum, item) => sum + item.scorePercentage, 0) / data.length;
+  if (avgScore < 70) {
+    insights.push('Student scores are below average - may need additional support');
+  } else if (avgScore > 90) {
+    insights.push('Student consistently scores high - may need more challenging assignments');
+  }
+
+  // Efficiency trend
+  const efficiencyTrend = calculateOverallTrends(data);
+  if (efficiencyTrend.efficiencyTrend === 'improving') {
+    insights.push('Student is becoming more efficient over time - great progress!');
+  } else if (efficiencyTrend.efficiencyTrend === 'declining') {
+    insights.push('Student efficiency is declining - may need intervention');
+  }
+
+  return insights;
+}
+
+// Get comprehensive student report for parent meetings
+router.get('/student/:studentId/parent-report', auth, requireRole(['TEACHER', 'ADMIN']), async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const { period = '30d' } = req.query; // Default to 30 days
+
+    const teacher = await prisma.user.findUnique({
+      where: { id: req.user.userId },
+      select: { organizationId: true }
+    });
+
+    if (!teacher) {
+      return res.status(404).json({ message: 'Teacher not found' });
+    }
+
+    // Verify student belongs to teacher's organization
+    const student = await prisma.user.findFirst({
+      where: { 
+        id: studentId,
+        organizationId: teacher.organizationId,
+        role: 'STUDENT'
+      }
+    });
+
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    // Calculate date range
+    const now = new Date();
+    let startDate = new Date();
+    
+    switch (period) {
+      case '7d':
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case '30d':
+        startDate.setDate(now.getDate() - 30);
+        break;
+      case '90d':
+        startDate.setDate(now.getDate() - 90);
+        break;
+      default:
+        startDate.setDate(now.getDate() - 30);
+    }
+
+    // Get all session data
+    const sessions = await prisma.userSession.findMany({
+      where: {
+        userId: studentId,
+        startTime: {
+          gte: startDate
+        }
+      },
+      orderBy: { startTime: 'desc' }
+    });
+
+    // Get all activity data
+    const activities = await prisma.studentActivity.findMany({
+      where: {
+        studentId,
+        timestamp: {
+          gte: startDate
+        }
+      },
+      orderBy: { timestamp: 'desc' }
+    });
+
+    // Get all assignment submissions
+    const submissions = await prisma.assessmentSubmission.findMany({
+      where: {
+        studentId,
+        startedAt: {
+          gte: startDate
+        }
+      },
+      include: {
+        assessment: {
+          select: {
+            title: true,
+            type: true,
+            points: true
+          }
+        }
+      },
+      orderBy: { startedAt: 'desc' }
+    });
+
+    // Calculate key metrics for parent reporting
+    const totalSessions = sessions.length;
+    const totalSessionTime = sessions
+      .filter(s => s.duration)
+      .reduce((sum, s) => sum + s.duration, 0);
+    
+    const completedAssignments = submissions.filter(s => s.status === 'COMPLETED').length;
+    const startedAssignments = submissions.filter(s => s.status === 'IN_PROGRESS').length;
+    const abandonedAssignments = submissions.filter(s => s.status === 'ABANDONED').length;
+    
+    // Mobile behavior analysis
+    const mobileSessions = sessions.filter(s => s.isMobile);
+    const appSwitches = sessions.reduce((sum, s) => sum + (s.appSwitches || 0), 0);
+    const focusTime = sessions.filter(s => s.screenFocus).length;
+    
+    // Suspicious patterns
+    const shortSessions = sessions.filter(s => s.duration && s.duration < 300).length; // < 5 minutes
+    const rapidSwitches = sessions.filter(s => s.appSwitches && s.appSwitches > 3).length;
+    
+    // Progress analysis
+    const averageScore = submissions.length > 0 
+      ? submissions.reduce((sum, s) => sum + (s.score || 0), 0) / submissions.length
+      : 0;
+    
+    const improvementTrend = calculateImprovementTrend(submissions);
+    
+    // Generate parent-friendly report
+    const parentReport = {
+      student: {
+        id: student.id,
+        name: `${student.firstName} ${student.lastName}`,
+        email: student.email
+      },
+      period: {
+        start: startDate,
+        end: now,
+        days: Math.ceil((now - startDate) / (1000 * 60 * 60 * 24))
+      },
+      engagement: {
+        totalSessions,
+        totalHours: Math.round((totalSessionTime / 3600) * 100) / 100,
+        averageSessionLength: totalSessions > 0 ? Math.round(totalSessionTime / totalSessions) : 0,
+        completedAssignments,
+        startedAssignments,
+        abandonedAssignments,
+        completionRate: (completedAssignments + startedAssignments) > 0 
+          ? Math.round((completedAssignments / (completedAssignments + startedAssignments)) * 100)
+          : 0
+      },
+      mobileBehavior: {
+        mobileSessions: mobileSessions.length,
+        appSwitches,
+        focusTime,
+        suspiciousPatterns: {
+          shortSessions,
+          rapidSwitches,
+          totalSuspicious: shortSessions + rapidSwitches
+        }
+      },
+      academic: {
+        averageScore: Math.round(averageScore * 100) / 100,
+        improvementTrend,
+        totalAssignments: submissions.length,
+        recentScores: submissions.slice(0, 5).map(s => ({
+          assignment: s.assessment.title,
+          score: s.score,
+          date: s.submittedAt
+        }))
+      },
+      recommendations: generateRecommendations({
+        totalSessions,
+        completedAssignments,
+        averageScore,
+        appSwitches,
+        shortSessions
+      }),
+      detailedActivity: activities.slice(0, 20) // Last 20 activities
+    };
+
+    res.json({ parentReport });
+  } catch (error) {
+    console.error('Parent report error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Helper function to calculate improvement trend
+function calculateImprovementTrend(submissions) {
+  if (submissions.length < 2) return 'insufficient_data';
+  
+  const sortedSubmissions = submissions
+    .filter(s => s.score !== null)
+    .sort((a, b) => new Date(a.submittedAt) - new Date(b.submittedAt));
+  
+  if (sortedSubmissions.length < 2) return 'insufficient_data';
+  
+  const firstHalf = sortedSubmissions.slice(0, Math.floor(sortedSubmissions.length / 2));
+  const secondHalf = sortedSubmissions.slice(Math.floor(sortedSubmissions.length / 2));
+  
+  const firstAvg = firstHalf.reduce((sum, s) => sum + s.score, 0) / firstHalf.length;
+  const secondAvg = secondHalf.reduce((sum, s) => sum + s.score, 0) / secondHalf.length;
+  
+  if (secondAvg > firstAvg + 5) return 'improving';
+  if (secondAvg < firstAvg - 5) return 'declining';
+  return 'stable';
+}
+
+// Helper function to generate recommendations
+function generateRecommendations(metrics) {
+  const recommendations = [];
+  
+  if (metrics.totalSessions < 5) {
+    recommendations.push('Student needs to log in more frequently');
+  }
+  
+  if (metrics.completedAssignments < 3) {
+    recommendations.push('Student should complete more assignments');
+  }
+  
+  if (metrics.averageScore < 70) {
+    recommendations.push('Student may need additional academic support');
+  }
+  
+  if (metrics.appSwitches > 10) {
+    recommendations.push('Student frequently switches apps - may need supervision');
+  }
+  
+  if (metrics.shortSessions > 5) {
+    recommendations.push('Student has many short sessions - may indicate lack of focus');
+  }
+  
+  return recommendations;
+}
+
 // Get student analytics (for teachers/admins)
 router.get('/student/:studentId', auth, requireRole(['TEACHER', 'ADMIN']), async (req, res) => {
   try {
@@ -337,28 +888,17 @@ router.get('/student/:studentId', auth, requireRole(['TEACHER', 'ADMIN']), async
       orderBy: { timestamp: 'desc' }
     });
 
-    // Get assignment attempts
-    const attempts = await prisma.assignmentAttempt.findMany({
-      where: {
-        studentId,
-        startTime: {
-          gte: startDate
-        }
-      },
-      include: {
-        assignment: true
-      },
-      orderBy: { startTime: 'desc' }
-    });
-
+    // TEMPORARILY DISABLED - AssignmentAttempt model doesn't exist
+    const attempts = [];
+    
     // Calculate analytics
     const totalSessionTime = sessions
       .filter(s => s.duration)
       .reduce((sum, s) => sum + s.duration, 0);
 
-    const completedAssignments = attempts.filter(a => a.status === 'COMPLETED').length;
-    const startedAssignments = attempts.filter(a => a.status === 'STARTED' || a.status === 'IN_PROGRESS').length;
-    const abandonedAssignments = attempts.filter(a => a.status === 'ABANDONED').length;
+    const completedAssignments = 0; // TEMPORARILY DISABLED
+    const startedAssignments = 0; // TEMPORARILY DISABLED
+    const abandonedAssignments = 0; // TEMPORARILY DISABLED
 
     const activityBreakdown = activities.reduce((acc, activity) => {
       acc[activity.activityType] = (acc[activity.activityType] || 0) + 1;
@@ -465,22 +1005,16 @@ router.get('/school', auth, requireRole(['ADMIN']), async (req, res) => {
       }
     });
 
-    const attempts = await prisma.assignmentAttempt.findMany({
-      where: {
-        schoolId: admin.schoolId,
-        startTime: {
-          gte: startDate
-        }
-      }
-    });
+    // TEMPORARILY DISABLED - AssignmentAttempt model doesn't exist
+    const attempts = [];
 
     // Calculate school analytics
     const totalSessionTime = sessions
       .filter(s => s.duration)
       .reduce((sum, s) => sum + s.duration, 0);
 
-    const completedAssignments = attempts.filter(a => a.status === 'COMPLETED').length;
-    const totalAssignments = attempts.length;
+    const completedAssignments = 0; // TEMPORARILY DISABLED
+    const totalAssignments = 0; // TEMPORARILY DISABLED
     const completionRate = totalAssignments > 0 
       ? Math.round((completedAssignments / totalAssignments) * 100)
       : 0;
@@ -536,9 +1070,9 @@ async function getTopStudents(schoolId, startDate, endDate) {
       id: true,
       firstName: true,
       lastName: true,
-      assignmentAttempts: {
+      submissions: {
         where: {
-          startTime: {
+          startedAt: {
             gte: startDate,
             lte: endDate
           },
@@ -546,7 +1080,7 @@ async function getTopStudents(schoolId, startDate, endDate) {
         },
         select: {
           score: true,
-          totalTime: true
+          timeSpent: true
         }
       },
       studentSessions: {
@@ -564,9 +1098,9 @@ async function getTopStudents(schoolId, startDate, endDate) {
   });
 
   const studentStats = students.map(student => {
-    const completedAssignments = student.assignmentAttempts.length;
-    const averageScore = student.assignmentAttempts.length > 0
-      ? student.assignmentAttempts.reduce((sum, a) => sum + (a.score || 0), 0) / student.assignmentAttempts.length
+    const completedAssignments = student.submissions.length;
+    const averageScore = student.submissions.length > 0
+      ? student.submissions.reduce((sum, a) => sum + (a.score || 0), 0) / student.submissions.length
       : 0;
     const totalTime = student.studentSessions
       .filter(s => s.duration)

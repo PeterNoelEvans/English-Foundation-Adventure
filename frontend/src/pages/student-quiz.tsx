@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from '../api';
+import Timer from '../components/Timer';
 
 interface Unit {
   id: string;
@@ -22,6 +23,8 @@ const StudentQuiz: React.FC = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<{ [qid: string]: any }>({});
   const [submitted, setSubmitted] = useState(false);
+  const [showTimer, setShowTimer] = useState(false);
+  const [timerDuration, setTimerDuration] = useState(30); // Default 30 minutes
 
   useEffect(() => {
     const fetchUnits = async () => {
@@ -58,9 +61,59 @@ const StudentQuiz: React.FC = () => {
     setSubmitted(true);
   };
 
+  const handleTimeUp = () => {
+    alert('⏰ Time is up! Please submit your answers.');
+    // Optionally auto-submit or show warning
+  };
+
+  const startQuiz = () => {
+    setShowTimer(true);
+  };
+
   return (
     <div style={{ maxWidth: 700, margin: 'auto', padding: 20 }}>
       <h2>Student Quiz</h2>
+      
+      {/* Timer Setup */}
+      {!showTimer && (
+        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <h3 className="text-lg font-semibold text-blue-800 mb-3">⏰ Quiz Timer Setup</h3>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Time Limit (minutes):
+              </label>
+              <input
+                type="number"
+                value={timerDuration}
+                onChange={(e) => setTimerDuration(parseInt(e.target.value) || 30)}
+                className="w-32 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                min="5"
+                max="120"
+              />
+            </div>
+            <button
+              onClick={startQuiz}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              🚀 Start Quiz with Timer
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Timer Display */}
+      {showTimer && (
+        <div className="mb-6">
+          <Timer 
+            duration={timerDuration}
+            onTimeUp={handleTimeUp}
+            showMotivational={true}
+            className="max-w-md mx-auto"
+          />
+        </div>
+      )}
+
       <div>
         <label>Unit:</label>
         <select value={selectedUnit} onChange={e => setSelectedUnit(e.target.value)}>

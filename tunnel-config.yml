@@ -1,0 +1,12 @@
+tunnel: lms-pne-uk
+credentials-file: /home/peter/.cloudflared/3c67ffb3-8c6f-4319-bb3b-e55630ad8038.json
+
+ingress:
+  # API routes
+  - hostname: api.lms-pne.uk
+    service: http://localhost:3000
+  # Frontend routes  
+  - hostname: lms-pne.uk
+    service: http://localhost:3001
+  # Catch-all rule (required)
+  - service: http_status:404

@@ -1,0 +1,101 @@
+// Progress Tracking System Schema
+// This schema extends the existing database with progress tracking capabilities
+
+model DailyProgress {
+  id          String   @id @default(cuid())
+  studentId   String
+  assignmentId String
+  date        DateTime @db.Date
+  score       Int?
+  timeSpentMinutes Int?
+  attempts    Int      @default(1)
+  completed   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  student     User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  assignment  Assessment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, assignmentId, date])
+  @@index([studentId, date])
+  @@index([assignmentId])
+}
+
+model WeeklyProgress {
+  id                    String   @id @default(cuid())
+  studentId             String
+  weekStart             DateTime @db.Date
+  weekEnd               DateTime @db.Date
+  totalScore            Int?
+  assignmentsCompleted  Int      @default(0)
+  averageScore          Decimal? @db.Decimal(5, 2)
+  bestDayOfWeek         String?
+  worstDayOfWeek        String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  // Relations
+  student               User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, weekStart])
+  @@index([studentId, weekStart])
+}
+
+model LearningPattern {
+  id          String   @id @default(cuid())
+  studentId   String
+  patternType String   // 'daily_peak', 'weekly_trend', 'struggle_point', 'improvement_rate'
+  patternData Json     // Flexible JSON data for different pattern types
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  student     User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, patternType])
+  @@index([patternType])
+}
+
+// Extend existing User model
+model User {
+  // ... existing fields ...
+
+  // Progress tracking relations
+  dailyProgress    DailyProgress[]
+  weeklyProgress   WeeklyProgress[]
+  learningPatterns LearningPattern[]
+}
+
+// Extend existing Assessment model
+model Assessment {
+  // ... existing fields ...
+
+  // Progress tracking relations
+  dailyProgress DailyProgress[]
+}
+
+// Progress Analytics Views (for reporting)
+model ProgressAnalytics {
+  id                String   @id @default(cuid())
+  studentId         String
+  organizationId    String
+  date              DateTime @db.Date
+  totalScore        Int      @default(0)
+  dailyAverage      Decimal? @db.Decimal(5, 2)
+  assignmentsCompleted Int    @default(0)
+  totalAssignments  Int      @default(0)
+  completionRate    Decimal? @db.Decimal(5, 2)
+  bestPerformanceDay String?
+  worstPerformanceDay String?
+  improvementRate   Decimal? @db.Decimal(5, 2)
+  consistencyScore  Decimal? @db.Decimal(5, 2)
+  createdAt         DateTime @default(now())
+
+  // Relations
+  student           User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, date])
+  @@index([organizationId, date])
+  @@index([studentId])
+} 

@@ -103,6 +103,19 @@ This guide provides practical, step-by-step instructions for creating each type 
 - **Tips:**
   - Keep the paragraph focused and not too long.
 
+#### e. Image Caption Matching (`image-caption`)
+- **Purpose:** Students drag captions to match with pictures.
+- **How to create:**
+  - Upload multiple images as prompts.
+  - Enter captions in the word bank (comma-separated).
+  - Enter the correct caption for each image in order.
+  - (Optional) Add extra captions to increase difficulty.
+- **Media:** Upload images for each picture that needs a caption.
+- **Tips:**
+  - Use clear, relevant images.
+  - Make sure captions are distinct and appropriate for each image.
+  - Consider the difficulty level when adding extra captions.
+
 ---
 
 ## 5. Writing (`writing`)

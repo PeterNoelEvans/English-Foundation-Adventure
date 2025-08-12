@@ -8,10 +8,14 @@
     "dev": "nodemon src/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "test": "node test-runner.js",
+    "test:assignments": "node test-assignment-availability.js",
+    "test:database": "node test-database-relationships.js",
+    "test:quick": "node test-database-relationships.js"
   },
   "dependencies": {
-    "@prisma/client": "^6.12.0",
+    "@prisma/client": "^6.13.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
@@ -24,7 +28,9 @@
     "@types/node": "^22.15.21",
     "@types/react": "^19.1.5",
     "@types/react-dom": "^19.1.5",
+    "axios": "^1.11.0",
     "nodemon": "^3.0.0",
-    "prisma": "^6.12.0"
+    "prisma": "^6.13.0",
+    "puppeteer": "^24.15.0"
   }
 }

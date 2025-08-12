@@ -202,7 +202,6 @@ router.patch(
   [
     body('name').optional().notEmpty().withMessage('Course name cannot be empty'),
     body('subjectId').optional().notEmpty().withMessage('Subject ID cannot be empty'),
-    body('yearLevel').optional().isIn(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6']).withMessage('Valid year level is required'),
     body('description').optional()
   ],
   async (req, res) => {
@@ -213,7 +212,7 @@ router.patch(
       }
       
       const { id } = req.params;
-      const { name, subjectId, yearLevel, description } = req.body;
+      const { name, subjectId, description } = req.body;
       
       // Check if course exists and belongs to teacher's organization
       const existingCourse = await prisma.course.findFirst({
@@ -251,25 +250,24 @@ router.patch(
         }
       }
       
-      // Check for duplicate course if subjectId or yearLevel is being changed
-      if ((subjectId && subjectId !== existingCourse.subjectId) || (yearLevel && yearLevel !== existingCourse.yearLevel)) {
+      // Check for duplicate course if subjectId is being changed
+      if (subjectId && subjectId !== existingCourse.subjectId) {
         const duplicateCourse = await prisma.course.findFirst({
           where: {
-            subjectId: subjectId || existingCourse.subjectId,
-            yearLevel: yearLevel || existingCourse.yearLevel,
+            subjectId: subjectId,
+            name: name || existingCourse.name,
             id: { not: id }
           }
         });
         
         if (duplicateCourse) {
-          return res.status(400).json({ message: 'Course with this year level already exists for this subject' });
+          return res.status(400).json({ message: 'Course with this name already exists for this subject' });
         }
       }
       
       const updateData = {};
       if (name) updateData.name = name;
       if (subjectId) updateData.subjectId = subjectId;
-      if (yearLevel) updateData.yearLevel = yearLevel;
       if (description !== undefined) updateData.description = description;
       
       const updatedCourse = await prisma.course.update({

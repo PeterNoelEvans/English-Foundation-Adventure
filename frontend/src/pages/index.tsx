@@ -1,7 +1,8 @@
 import { useRouter } from 'next/router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import axios from '../api';
 
-const organizations = [
+const staticOrganizations = [
   {
     id: 'pbs',
     name: 'PBS',
@@ -10,21 +11,48 @@ const organizations = [
   },
   {
     id: 'hospital',
-    name: 'Hospital',
+    name: 'Naresuan University',
     color: 'bg-blue-500 hover:bg-blue-600',
-    description: 'Healthcare Training Institute'
+    description: 'English for Healthcare'
   },
   {
     id: 'coding-school',
-    name: 'Coding School',
+    name: 'Peter\'s Coding School',
     color: 'bg-purple-500 hover:bg-purple-600',
     description: 'Technology and Programming'
+  },
+  {
+    id: 'my-school',
+    name: 'My School',
+    color: 'bg-indigo-500 hover:bg-indigo-600',
+    description: 'Your description here'
   }
 ];
 
 export default function LandingPage() {
   const router = useRouter();
   const [selectedOrg, setSelectedOrg] = useState('');
+  const [organizations, setOrganizations] = useState(staticOrganizations);
+
+  useEffect(() => {
+    // Try to fetch organizations from backend; fallback to static list
+    const fetchOrgs = async () => {
+      try {
+        const res = await axios.get('/organizations');
+        const apiOrgs = (res.data?.organizations || []).map((o: any) => ({
+          id: o.code.toLowerCase().replace(/\s+/g, '-'),
+          name: o.name,
+          color: o.primaryColor ? `bg-${o.primaryColor}` : 'bg-green-500 hover:bg-green-600',
+          description: o.domain || 'Organization',
+          logo: o.logo || null,
+          primaryColor: o.primaryColor || null,
+          secondaryColor: o.secondaryColor || null
+        }));
+        if (apiOrgs.length > 0) setOrganizations(apiOrgs);
+      } catch {}
+    };
+    fetchOrgs();
+  }, []);
 
   const handleOrganizationSelect = (orgId: string) => {
     setSelectedOrg(orgId);
@@ -58,10 +86,28 @@ export default function LandingPage() {
               <button
                 key={org.id}
                 onClick={() => handleOrganizationSelect(org.id)}
-                className={`${org.color} text-white rounded-lg p-8 text-center transition-all duration-200 transform hover:scale-105 hover:shadow-lg`}
+                className={`relative overflow-hidden rounded-lg p-0 text-left transition-all duration-200 transform hover:scale-105 hover:shadow-lg`}
+                style={{
+                  backgroundColor: org.primaryColor ? org.primaryColor : undefined
+                }}
               >
-                <h3 className="text-2xl font-bold mb-2">{org.name}</h3>
-                <p className="text-sm opacity-90">{org.description}</p>
+                <div className="relative">
+                  {org.logo ? (
+                    <div
+                      className="h-40 md:h-48 w-full bg-cover bg-center"
+                      style={{ backgroundImage: `url(${org.logo})` }}
+                    />
+                  ) : (
+                    <div className={`h-40 md:h-48 w-full ${org.color}`} />
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+                  <div className="absolute inset-0 flex items-end p-6">
+                    <div>
+                      <h3 className="text-2xl font-bold text-white drop-shadow mb-1">{org.name}</h3>
+                      <p className="text-sm text-white/90 drop-shadow">{org.description}</p>
+                    </div>
+                  </div>
+                </div>
               </button>
             ))}
           </div>

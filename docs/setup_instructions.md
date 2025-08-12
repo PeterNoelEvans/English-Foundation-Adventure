@@ -83,6 +83,8 @@ sudo -u postgres createdb english_foundation
   DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@localhost:5432/english_foundation?schema=public"
   JWT_SECRET="your-super-secret-key-change-this-in-production"
   PORT=3000
+  # Comma-separated list of emails that have superuser access to organization management
+  SUPERUSER_EMAILS="peter@example.com"
   ```
 - Replace `YOUR_PASSWORD` with your actual postgres password.
 
@@ -251,6 +253,11 @@ pm2 delete all                # Remove all apps
 - **Database Connection**: Verify PostgreSQL is running and credentials are correct
 - **PM2 Issues**: Check logs with `pm2 logs` and restart if needed
 - **File Uploads**: Ensure `/uploads` directory exists and has proper permissions
+
+### Uploads structure
+- Resources are stored by organization and year: `uploads/resources/<organizationId>/<year>/...`
+- Organization logos are stored by organization and year: `uploads/org-logos/<organizationId>/<year>/...`
+- These folders are served statically at `/uploads/...` by the backend.
 
 ### Useful Commands:
 ```bash

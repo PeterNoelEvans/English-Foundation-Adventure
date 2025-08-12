@@ -49,27 +49,32 @@ const profilePictureUpload = multer({
 const organizationMapping = {
   'pbs': 'PBS',
   'hospital': 'HOSPITAL',
-  'coding-school': 'CODING'
+  'coding-school': 'CODING',
+  'my-school': 'MY_SCHOOL'
 };
 
 // Helper function to get or create organization
 async function getOrCreateOrganization(orgCode) {
-  const orgName = organizationMapping[orgCode] || 'PBS';
-  
+  const raw = (orgCode || 'pbs').toString().trim();
+  const normalizedCode = raw.toUpperCase().replace(/[-\s]+/g, '_');
+  // Try mapping by raw (e.g., 'coding-school') or normalized lowercase key
+  const mapped = organizationMapping[raw] || organizationMapping[normalizedCode.toLowerCase()];
+  const targetCode = mapped || normalizedCode; // Use mapped known codes, else the normalized code
+
   let organization = await prisma.organization.findFirst({
-    where: { code: orgName }
+    where: { code: targetCode }
   });
-  
+
   if (!organization) {
     organization = await prisma.organization.create({
       data: {
-        name: orgName,
-        code: orgName,
-        domain: `${orgCode}.yourdomain.com`
+        name: targetCode,
+        code: targetCode,
+        domain: `${raw}.yourdomain.com`
       }
     });
   }
-  
+
   return organization;
 }
 
@@ -181,9 +186,17 @@ router.post('/register', [
   body('firstName').notEmpty(),
   body('lastName').notEmpty(),
   body('role').isIn(['TEACHER', 'STUDENT']),
-  body('yearLevel').optional().isIn(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6']),
+  body('yearLevel').optional().isIn(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'ADULT', 'ADVANCED', 'IN_HOUSE']),
   body('classNum').optional().isIn(['1', '2', '3', '4', '5', '6']),
-  body('studentNumber').optional().isLength({ min: 5, max: 5 }).isNumeric().withMessage('Student number must be exactly 5 digits'),
+  body('studentNumber').optional().custom((value) => {
+    if (value === '' || value === null || value === undefined) {
+      return true; // Allow empty values
+    }
+    if (value.length !== 5 || !/^\d{5}$/.test(value)) {
+      throw new Error('Student number must be exactly 5 digits');
+    }
+    return true;
+  }),
   body('organization').optional()
 ], async (req, res) => {
   try {
@@ -300,7 +313,7 @@ router.get('/me', auth, async (req, res) => {
 router.patch('/users/:userId/classroom', [
   auth,
   requireRole(['ADMIN', 'TEACHER']),
-  body('yearLevel').isIn(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6']),
+  body('yearLevel').isIn(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'ADULT', 'ADVANCED', 'IN_HOUSE']),
   body('classNum').isIn(['1', '2', '3', '4', '5', '6'])
 ], async (req, res) => {
   try {
@@ -352,7 +365,7 @@ router.patch('/users/:userId/classroom', [
 router.post('/classroom/:classroomId/progress', [
   auth,
   requireRole(['ADMIN', 'TEACHER']),
-  body('newYearLevel').isIn(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6']).withMessage('Valid year level is required'),
+  body('newYearLevel').isIn(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'ADULT', 'ADVANCED', 'IN_HOUSE']).withMessage('Valid year level is required'),
   body('newClassNum').optional().isIn(['1', '2', '3', '4', '5', '6'])
 ], async (req, res) => {
   try {
@@ -523,7 +536,7 @@ router.patch('/students/:studentId', auth, requireRole(['ADMIN', 'TEACHER']), [
   body('nickname').optional(),
   body('password').optional().isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
   body('profilePicture').optional(),
-  body('gradeLevel').optional().isIn(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6'])
+  body('gradeLevel').optional().isIn(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'ADULT', 'ADVANCED', 'IN_HOUSE'])
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -601,6 +614,33 @@ router.patch('/students/:studentId', auth, requireRole(['ADMIN', 'TEACHER']), [
     });
   } catch (error) {
     console.error('Update student profile error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get available classes for the organization
+router.get('/available-classes', auth, async (req, res) => {
+  try {
+    const classrooms = await prisma.classroom.findMany({
+      where: {
+        organizationId: req.user.organizationId
+      },
+      orderBy: [
+        { yearLevel: 'asc' },
+        { classNum: 'asc' }
+      ]
+    });
+
+    const classes = classrooms.map(classroom => ({
+      id: classroom.id,
+      name: `${classroom.yearLevel}/${classroom.classNum}`,
+      yearLevel: classroom.yearLevel,
+      classNum: classroom.classNum
+    }));
+
+    res.json({ classes });
+  } catch (error) {
+    console.error('Get available classes error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -799,6 +839,133 @@ router.post('/session/ping', auth, async (req, res) => {
   } catch (error) {
     console.error('Session ping error:', error);
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get users for teacher dashboard
+router.get('/users', auth, requireRole(['TEACHER']), async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      where: {
+        organizationId: req.user.organizationId
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        organizationId: true,
+        createdAt: true
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    res.json({ users });
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    res.status(500).json({ message: 'Failed to fetch users' });
+  }
+});
+
+// Update student's class
+router.patch('/students/:studentId/class', auth, requireRole(['ADMIN', 'TEACHER']), async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const { classroomId } = req.body;
+
+    // Check if student exists and belongs to teacher's organization
+    const student = await prisma.user.findFirst({
+      where: {
+        id: studentId,
+        role: 'STUDENT',
+        organizationId: req.user.organizationId
+      }
+    });
+
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    // Check if classroom exists and belongs to teacher's organization
+    const classroom = await prisma.classroom.findFirst({
+      where: {
+        id: classroomId,
+        organizationId: req.user.organizationId
+      }
+    });
+
+    if (!classroom) {
+      return res.status(404).json({ message: 'Classroom not found' });
+    }
+
+    // Update student's classroom
+    const updatedStudent = await prisma.user.update({
+      where: { id: studentId },
+      data: { classroomId },
+      include: {
+        organization: true,
+        classroom: true
+      }
+    });
+
+    // Remove password from response
+    const { password: _, ...studentWithoutPassword } = updatedStudent;
+
+    res.json({
+      message: 'Student class updated successfully',
+      student: studentWithoutPassword
+    });
+  } catch (error) {
+    console.error('Update student class error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Delete a student (admin/teacher only)
+router.delete('/students/:studentId', auth, requireRole(['ADMIN', 'TEACHER']), async (req, res) => {
+  try {
+    const { studentId } = req.params;
+
+    // Check if student exists and belongs to teacher's organization
+    const student = await prisma.user.findFirst({
+      where: {
+        id: studentId,
+        role: 'STUDENT',
+        organizationId: req.user.organizationId
+      }
+    });
+
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    // Check if student has any active enrollments or submissions
+    const enrollments = await prisma.studentCourse.findMany({
+      where: { studentId }
+    });
+
+    const submissions = await prisma.assessmentSubmission.findMany({
+      where: { studentId }
+    });
+
+    if (enrollments.length > 0 || submissions.length > 0) {
+      return res.status(400).json({ 
+        message: 'Cannot delete student with active enrollments or submissions. Please remove all enrollments and submissions first.' 
+      });
+    }
+
+    // Delete the student
+    await prisma.user.delete({
+      where: { id: studentId }
+    });
+
+    res.json({ message: 'Student deleted successfully' });
+  } catch (error) {
+    console.error('Delete student error:', error);
+    res.status(500).json({ message: 'Server error' });
   }
 });
 

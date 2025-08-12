@@ -1,3 +1,40 @@
+# Resource Management Extensions
+
+## Grouped Resources and Appending Files
+
+- Resources are grouped automatically when uploaded within a small time window.
+- Additionally, you can set a label during upload; any resources sharing the same label are grouped, even across sessions.
+- Planned: an "Append files" action on grouped resources to add more files later.
+
+### Upload Fields
+- title (string)
+- description (string)
+- subjectId (uuid)
+- courseId (uuid, optional)
+- unitId (uuid, optional)
+- tags (array)
+- isPublic (boolean)
+- isShared (boolean)
+- label (string, optional) — use this to append to a group later
+
+## Editing Resources
+
+- Edit title/description from the Teacher portal via Edit on each resource.
+- Planned extensions: tags editing and moving the resource to a different course/unit.
+
+## Supported File Types
+
+- Audio: MP3, WAV, OGG, AAC, MP4 audio
+- Video: MP4, WebM, OGG, AVI, MOV
+- Documents: PDF
+- Images: JPEG, PNG, GIF, WebP, SVG
+- Text/Code: txt, md, html, css, js, json
+
+## Cloning Resources Across Organizations
+
+- Use the Clone action to copy a resource to another organization.
+- Select target organization and subject; optionally pick course/unit and include assignments.
+
 # 📝 Edit & Delete Functionality Guide
 
 ## 🎯 **Overview**

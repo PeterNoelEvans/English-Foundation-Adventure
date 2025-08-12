@@ -25,6 +25,10 @@ if pgrep -f "node.*server.js" > /dev/null; then
     pkill -9 -f "node.*server.js" 2>/dev/null || true
 fi
 
+# Stop Cloudflare tunnel
+echo "🌍 Stopping Cloudflare tunnel..."
+pkill -f "cloudflared" 2>/dev/null || true
+
 echo "✅ All servers stopped!"
 echo ""
 echo "📋 To start servers again, run:"

@@ -297,6 +297,34 @@ The English Foundation Learning Platform supports a comprehensive range of assig
     "words": ["The", "cat", "sat", "on", "the", "mat"],
     "correctOrder": [0, 1, 2, 3, 4, 5]
   },
+```
+
+### 13. Image Caption Matching
+**Description:** Drag captions to match with pictures.
+
+**Configuration:**
+```json
+{
+  "type": "image_caption_matching",
+  "content": "Match the captions with the correct pictures:",
+  "options": {
+    "images": [
+      {"id": "img1", "url": "/images/cat.jpg", "caption": "A cat"},
+      {"id": "img2", "url": "/images/dog.jpg", "caption": "A dog"},
+      {"id": "img3", "url": "/images/bird.jpg", "caption": "A bird"}
+    ],
+    "captions": ["A cat", "A dog", "A bird", "A fish", "A rabbit"],
+    "correctMatches": [0, 1, 2]
+  },
+  "scoring": {
+    "points": 3,
+    "partialCredit": true
+  }
+}
+```
+
+**Auto-Scoring:** ✅ Full auto-scoring
+**Implementation:** Caption-image pair validation
   "scoring": {
     "points": 6,
     "partialCredit": true
@@ -366,12 +394,17 @@ The English Foundation Learning Platform supports a comprehensive range of assig
 **Configuration:**
 ```json
 {
-  "type": "image_upload",
+  "type": "image-upload",
   "content": "Take a photo of your completed math worksheet.",
   "options": {
-    "maxFileSize": 10485760, // 10MB
-    "allowedFormats": ["jpg", "png", "gif"],
-    "instructions": "Ensure the image is clear and well-lit"
+    "maxFileSize": 10485760,
+    "allowedFormats": ["jpg", "png", "gif", "webp"],
+    "instructions": "Ensure the image is clear and well-lit",
+    "slots": ["Code screenshot", "Turtle output screenshot"],
+    "maxFilesPerSlot": 1,
+    "allowSupplementary": true,
+    "maxSupplementaryFiles": 5,
+    "supplementaryLabel": "Supplementary evidence"
   },
   "scoring": {
     "points": 15,

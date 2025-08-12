@@ -14,6 +14,9 @@ const analyticsRoutes = require('./routes/analytics');
 const assignmentsRoutes = require('./routes/assignments');
 const enrollmentRoutes = require('./routes/enrollment');
 const classroomsRoutes = require('./routes/classrooms');
+const progressRoutes = require('./routes/progress');
+const organizationsRoutes = require('./routes/organizations');
+const chatRoutes = require('./routes/chat');
 
 // Environment variables already loaded above
 
@@ -39,6 +42,9 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/assignments', assignmentsRoutes);
 app.use('/api/enrollment', enrollmentRoutes);
 app.use('/api/classrooms', classroomsRoutes);
+app.use('/api/progress', progressRoutes);
+app.use('/api/organizations', organizationsRoutes);
+app.use('/api/chat', chatRoutes);
 
 // Basic route for testing
 app.get('/', (req, res) => {

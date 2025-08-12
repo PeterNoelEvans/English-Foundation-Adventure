@@ -1,0 +1,3551 @@
+import React, { useEffect, useState } from 'react';
+import axios from '../api';
+import ProgressDashboard from '../components/ProgressDashboard';
+
+interface AssignmentFormData {
+  title: string;
+  description: string;
+  type: string;
+  subtype: string;
+  category: string;
+  difficulty: string;
+  timeLimit: string;
+  points: number;
+  instructions: string;
+  criteria: string;
+  autoGrade: boolean;
+  showFeedback: boolean;
+  dueDate: string;
+  availableFrom: string;
+  availableTo: string;
+  quarter: string;
+  maxAttempts: string;
+  shuffleQuestions: boolean;
+  allowReview: boolean;
+  tags: string[];
+  courseId: string;
+  unitId: string;
+  partId: string;
+  sectionId: string;
+  topicId: string;
+  published: boolean;
+  // Dynamic content properties
+  question: string;
+  options: string[];
+  correctAnswer: string;
+  correctAnswerIndex: number;
+  explanation: string;
+  incorrectExplanations: Record<string, string>;
+  // Recommendation fields
+  recommendations: Record<string, string[]>;
+  negativeScoreThreshold: number;
+  recommendedCourses: string[];
+  difficultyLevel: string;
+  learningObjectives: string[];
+  // Engagement and tracking fields
+  trackAttempts: boolean;
+  trackConfidence: boolean;
+  trackTimeSpent: boolean;
+  engagementDeadline: string;
+  lateSubmissionPenalty: number;
+  statements: string[];
+  answers: string[];
+  leftItems: string[];
+  rightItems: string[];
+  sentence: string;
+  wordBank: string[];
+  images: File[];
+  captions: string[];
+  orderItems: string[];
+  bulkQuestions: string;
+}
+
+const Teacher: React.FC = () => {
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [courses, setCourses] = useState<any[]>([]);
+  const [subjects, setSubjects] = useState<any[]>([]);
+  const [selectedCourse, setSelectedCourse] = useState<any>(null);
+  const [viewMode, setViewMode] = useState<'courses' | 'units'>('courses');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  
+  // Resource management state
+  const [resources, setResources] = useState<any[]>([]);
+  const [sharedResources, setSharedResources] = useState<any[]>([]);
+  const [selectedCourseUnits, setSelectedCourseUnits] = useState<any[]>([]);
+  const [resourceActiveTab, setResourceActiveTab] = useState<'upload' | 'my-resources' | 'shared' | 'allocate'>('upload');
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [newResource, setNewResource] = useState({
+    title: '',
+    description: '',
+    courseId: '',
+    unitId: '',
+    tags: [] as string[],
+    isPublic: false,
+    isShared: false
+  });
+
+  // Resource allocation state
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [selectedResources, setSelectedResources] = useState<string[]>([]);
+  const [selectedAssignment, setSelectedAssignment] = useState<string>('');
+  const [allocationLoading, setAllocationLoading] = useState(false);
+  const [resourceSearch, setResourceSearch] = useState('');
+  const [resourceTypeFilter, setResourceTypeFilter] = useState<string>('');
+
+  // Assignment resources modal state
+  const [showAssignmentResourcesModal, setShowAssignmentResourcesModal] = useState(false);
+  const [selectedAssignmentForResources, setSelectedAssignmentForResources] = useState<any>(null);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [assignmentsPerPage] = useState(10);
+
+  // Grade level options
+  const gradeLevels = [
+    { value: 'P1', label: 'Primary 1 (P1)' },
+    { value: 'P2', label: 'Primary 2 (P2)' },
+    { value: 'P3', label: 'Primary 3 (P3)' },
+    { value: 'P4', label: 'Primary 4 (P4)' },
+    { value: 'P5', label: 'Primary 5 (P5)' },
+    { value: 'P6', label: 'Primary 6 (P6)' },
+    { value: 'M1', label: 'Mattayom 1 (M1)' },
+    { value: 'M2', label: 'Mattayom 2 (M2)' },
+    { value: 'M3', label: 'Mattayom 3 (M3)' },
+    { value: 'M4', label: 'Mattayom 4 (M4)' },
+    { value: 'M5', label: 'Mattayom 5 (M5)' },
+    { value: 'M6', label: 'Mattayom 6 (M6)' },
+    { value: 'ADULT', label: 'Adult Education' },
+    { value: 'ADVANCED', label: 'Advanced/Professional' },
+    { value: 'IN_HOUSE', label: 'In-House Training' },
+  ];
+
+  const [newCourse, setNewCourse] = useState({ name: '', description: '', subjectId: '' });
+  const [newSubject, setNewSubject] = useState({ name: '', description: '' });
+  const [bulkUnits, setBulkUnits] = useState('');
+  const [showBulkImport, setShowBulkImport] = useState(false);
+  
+  // Assignment management state
+  const [showCreateAssignment, setShowCreateAssignment] = useState(false);
+  const [editingAssignment, setEditingAssignment] = useState<any>(null);
+  const [showEditAssignment, setShowEditAssignment] = useState(false);
+  const [newAssignment, setNewAssignment] = useState<AssignmentFormData>({
+    title: '',
+    description: '',
+    type: '',
+    subtype: '',
+    category: '',
+    difficulty: 'beginner',
+    timeLimit: '',
+    points: 1,
+    instructions: '',
+    criteria: '',
+    autoGrade: true,
+    showFeedback: true,
+    dueDate: '',
+    availableFrom: '',
+    availableTo: '',
+    quarter: 'Q1',
+    maxAttempts: '',
+    shuffleQuestions: false,
+    allowReview: true,
+    tags: [],
+    courseId: '',
+    unitId: '',
+    partId: '',
+    sectionId: '',
+    topicId: '',
+    published: true,
+    // Dynamic content properties
+    question: '',
+    options: [],
+    correctAnswer: '',
+    correctAnswerIndex: -1,
+    explanation: '',
+    incorrectExplanations: {},
+    // Recommendation fields
+    recommendations: {},
+    negativeScoreThreshold: 0,
+    recommendedCourses: [],
+    difficultyLevel: 'beginner',
+    learningObjectives: [],
+    // Engagement and tracking fields
+    trackAttempts: true,
+    trackConfidence: true,
+    trackTimeSpent: true,
+    engagementDeadline: '',
+    lateSubmissionPenalty: 0,
+    statements: [],
+    answers: [],
+    leftItems: [],
+    rightItems: [],
+    sentence: '',
+    wordBank: [],
+    images: [],
+    captions: [],
+    orderItems: [],
+    bulkQuestions: ''
+  });
+
+  // Add state for incorrect explanations text
+  const [incorrectExplanationsText, setIncorrectExplanationsText] = useState('');
+
+  // Sync text area with assignment state when opening the form or when assignment changes
+  useEffect(() => {
+    if (showCreateAssignment) {
+      setIncorrectExplanationsText(
+        newAssignment.incorrectExplanations && Object.keys(newAssignment.incorrectExplanations).length > 0
+          ? JSON.stringify(newAssignment.incorrectExplanations, null, 2)
+          : ''
+      );
+    }
+    // eslint-disable-next-line
+  }, [showCreateAssignment, newAssignment.incorrectExplanations]);
+
+  useEffect(() => {
+    // Check if user is authenticated
+    const token = localStorage.getItem('token');
+    console.log('Teacher page loaded, token exists:', !!token);
+    if (!token) {
+      console.log('No token found, redirecting to login');
+      window.location.href = '/login';
+      return;
+    }
+    
+    console.log('Token found, fetching data...');
+    fetchCourses();
+    fetchSubjects();
+    fetchResources();
+    fetchSharedResources();
+    fetchAssignments();
+  }, []);
+
+  // Auto-dismiss success messages after 5 seconds
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => {
+        setSuccess('');
+      }, 5000); // 5 seconds
+
+      return () => clearTimeout(timer);
+    }
+  }, [success]);
+
+  // Auto-dismiss error messages after 8 seconds
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        setError('');
+      }, 8000); // 8 seconds
+
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
+  const fetchCourses = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      console.log('Fetching courses...');
+      const res = await axios.get('/courses?t=' + Date.now()); // Cache busting
+      console.log('Fetched courses response:', res.data);
+      console.log('Fetched courses:', res.data.courses);
+      // Debug: Check if Mattayom course has units
+      const mattayomCourse = res.data.courses.find((c: any) => c.name.includes('Mattayom'));
+      if (mattayomCourse) {
+        console.log('Mattayom course found:', mattayomCourse);
+        console.log('Mattayom course units:', mattayomCourse.units);
+      }
+      setCourses(res.data.courses);
+    } catch (err: any) {
+      console.error('Error fetching courses:', err);
+      console.error('Error details:', err.response?.data);
+      setError('Failed to fetch courses');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchSubjects = async () => {
+    try {
+      console.log('Fetching subjects...');
+      // Check if token exists
+      const token = localStorage.getItem('token');
+      console.log('Token exists:', !!token);
+      if (token) {
+        console.log('Token length:', token.length);
+        console.log('Token preview:', token.substring(0, 20) + '...');
+      }
+      
+      console.log('Making request to /subjects...');
+      const res = await axios.get('/subjects');
+      console.log('Subjects response status:', res.status);
+      console.log('Subjects response data:', res.data);
+      console.log('Subjects array:', res.data.subjects);
+      console.log('Subjects array length:', res.data.subjects?.length || 0);
+      
+      if (res.data.subjects) {
+        setSubjects(res.data.subjects);
+        console.log('Subjects state updated with:', res.data.subjects.length, 'subjects');
+      } else {
+        console.error('No subjects array in response');
+        setSubjects([]);
+      }
+    } catch (err: any) {
+      console.error('Failed to fetch subjects:', err);
+      console.error('Error details:', err.response?.data);
+      console.error('Error status:', err.response?.status);
+      console.error('Error message:', err.message);
+      setSubjects([]);
+    }
+  };
+
+  // Resource management functions
+  const fetchResources = async () => {
+    // Check if user is authenticated
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.log('No authentication token found, skipping resources fetch');
+      return;
+    }
+    
+    setLoading(true);
+    setError('');
+    try {
+      const res = await axios.get('/resources');
+      setResources(res.data.resources);
+    } catch (err: any) {
+      setError('Failed to fetch resources');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchSharedResources = async () => {
+    try {
+      // Check if user is authenticated
+      const token = localStorage.getItem('token');
+      console.log('Token found:', !!token, 'Token length:', token?.length);
+      
+      if (!token) {
+        console.log('No authentication token found, skipping shared resources fetch');
+        return;
+      }
+      
+      console.log('Making request to /resources/shared with token');
+      const res = await axios.get('/resources/shared');
+      console.log('Shared resources response:', res.data);
+      setSharedResources(res.data.resources);
+    } catch (err: any) {
+      console.error('Failed to fetch shared resources:', err);
+      console.error('Error status:', err.response?.status);
+      console.error('Error data:', err.response?.data);
+      // Don't show error for authentication issues
+      if (err.response?.status !== 401) {
+        setError('Failed to fetch shared resources');
+      }
+    }
+  };
+
+  const fetchUnitsForCourse = async (courseId: string) => {
+    try {
+      const res = await axios.get(`/units/course/${courseId}`);
+      setSelectedCourseUnits(res.data.units);
+    } catch (err: any) {
+      console.error('Failed to fetch units for course:', err);
+      setSelectedCourseUnits([]);
+    }
+  };
+
+  const handleCourseChange = (courseId: string) => {
+    setNewResource(prev => ({ ...prev, courseId, unitId: '' }));
+    if (courseId) {
+      fetchUnitsForCourse(courseId);
+    } else {
+      setSelectedCourseUnits([]);
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const files = Array.from(e.target.files);
+      setSelectedFiles(files);
+    }
+  };
+
+  const handleCreateResource = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    
+    if (selectedFiles.length === 0) {
+      setError('Please select at least one file');
+      return;
+    }
+
+    if (!newResource.title.trim()) {
+      setError('Title is required');
+      return;
+    }
+
+    try {
+      let uploadedCount = 0;
+      const totalFiles = selectedFiles.length;
+
+      for (const file of selectedFiles) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('title', `${newResource.title}${selectedFiles.length > 1 ? ` - ${file.name}` : ''}`);
+        formData.append('description', newResource.description);
+        formData.append('courseId', newResource.courseId);
+        formData.append('unitId', newResource.unitId);
+        formData.append('tags', JSON.stringify(newResource.tags));
+        formData.append('isPublic', newResource.isPublic.toString());
+        formData.append('isShared', newResource.isShared.toString());
+
+        await axios.post('/resources', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+          onUploadProgress: (progressEvent) => {
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
+            setUploadProgress(percentCompleted);
+          },
+        });
+
+        uploadedCount++;
+      }
+
+      setSuccess(`Successfully uploaded ${uploadedCount} resource(s)!`);
+      setNewResource({
+        title: '',
+        description: '',
+        courseId: '',
+        unitId: '',
+        tags: [],
+        isPublic: false,
+        isShared: false
+      });
+      setSelectedFiles([]);
+      setUploadProgress(0);
+      fetchResources();
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to upload resource(s)');
+      setUploadProgress(0);
+    }
+  };
+
+  const handleDeleteResource = async (resourceId: string) => {
+    if (window.confirm('Are you sure you want to delete this resource?')) {
+      try {
+        await axios.delete(`/resources/${resourceId}`);
+        setSuccess('Resource deleted successfully!');
+        fetchResources();
+      } catch (err: any) {
+        setError(err.response?.data?.message || 'Failed to delete resource');
+      }
+    }
+  };
+
+  const getFileIcon = (type: string) => {
+    if (type.includes('audio')) return '🎵';
+    if (type.includes('video')) return '🎥';
+    if (type.includes('pdf')) return '📄';
+    if (type.includes('image')) return '🖼️';
+    return '📁';
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  // Resource allocation functions
+  const fetchAssignments = async () => {
+    try {
+      // Check if user is authenticated
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.log('No authentication token found, skipping assignments fetch');
+        return;
+      }
+      
+      const res = await axios.get('/assignments/teacher');
+      setAssignments(res.data.assignments);
+    } catch (err: any) {
+      console.error('Failed to fetch assignments:', err);
+      // Don't show error for authentication issues
+      if (err.response?.status !== 401) {
+        setError('Failed to fetch assignments');
+      }
+    }
+  };
+
+  const handleResourceSelection = (resourceId: string) => {
+    setSelectedResources(prev => 
+      prev.includes(resourceId) 
+        ? prev.filter(id => id !== resourceId)
+        : [...prev, resourceId]
+    );
+  };
+
+  const handleSelectAllResources = () => {
+    const filteredResources = resources.filter(resource => {
+      const matchesSearch = resource.title.toLowerCase().includes(resourceSearch.toLowerCase()) ||
+                           resource.description?.toLowerCase().includes(resourceSearch.toLowerCase());
+      const matchesType = !resourceTypeFilter || resource.type.toLowerCase().includes(resourceTypeFilter.toLowerCase());
+      return matchesSearch && matchesType;
+    });
+    
+    const allResourceIds = filteredResources.map(r => r.id);
+    setSelectedResources(allResourceIds);
+  };
+
+  const handleClearSelection = () => {
+    setSelectedResources([]);
+  };
+
+  const handleAllocateResources = async () => {
+    console.log('🔧 Allocate Resources clicked!');
+    console.log('Selected assignment:', selectedAssignment);
+    console.log('Selected resources:', selectedResources);
+    
+    if (!selectedAssignment || selectedResources.length === 0) {
+      console.log('❌ Validation failed - missing assignment or resources');
+      setError('Please select an assignment and at least one resource');
+      return;
+    }
+
+    setAllocationLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      console.log('📤 Sending allocation request...');
+      const response = await axios.post('/assignments/resources', {
+        assignmentId: selectedAssignment,
+        resourceIds: selectedResources
+      });
+      
+      console.log('✅ Allocation successful:', response.data);
+
+      setSuccess(`Successfully allocated ${selectedResources.length} resource(s) to assignment`);
+      setSelectedResources([]);
+      setSelectedAssignment('');
+      fetchAssignments(); // Refresh to show updated allocations
+    } catch (err: any) {
+      console.error('❌ Allocation failed:', err);
+      setError(err.response?.data?.message || 'Failed to allocate resources');
+    } finally {
+      setAllocationLoading(false);
+    }
+  };
+
+  const handleRemoveResourceFromAssignment = async (assignmentId: string, resourceId: string) => {
+    try {
+      await axios.delete(`/assignments/${assignmentId}/resources/${resourceId}`);
+      setSuccess('Resource removed from assignment');
+      fetchAssignments();
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to remove resource');
+    }
+  };
+
+  const handleViewAssignmentResources = (assignment: any) => {
+    setSelectedAssignmentForResources(assignment);
+    setShowAssignmentResourcesModal(true);
+  };
+
+  const getFilteredResources = () => {
+    return resources.filter(resource => {
+      const matchesSearch = resource.title.toLowerCase().includes(resourceSearch.toLowerCase()) ||
+                           resource.description?.toLowerCase().includes(resourceSearch.toLowerCase());
+      const matchesType = !resourceTypeFilter || resource.type.toLowerCase().includes(resourceTypeFilter.toLowerCase());
+      return matchesSearch && matchesType;
+    });
+  };
+
+  const handleCreateCourse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    if (!newCourse.name.trim() || !newCourse.subjectId) {
+      setError('Course name and subject are required');
+      return;
+    }
+    try {
+      await axios.post('/courses', newCourse);
+      setNewCourse(prev => ({ ...prev, name: '', description: '', subjectId: '' }));
+      setSuccess('Course created successfully!');
+      fetchCourses();
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to create course');
+    }
+  };
+
+  const handleCreateSubject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    if (!newSubject.name.trim()) {
+      setError('Subject name is required');
+      return;
+    }
+    try {
+      console.log('Creating subject:', newSubject);
+      const response = await axios.post('/subjects', newSubject);
+      console.log('Subject creation response:', response.data);
+      setNewSubject(prev => ({ ...prev, name: '', description: '' }));
+      setSuccess('Subject created successfully!');
+      console.log('Calling fetchSubjects after subject creation...');
+      await fetchSubjects();
+      console.log('fetchSubjects completed');
+    } catch (err: any) {
+      console.error('Subject creation error:', err);
+      setError(err.response?.data?.message || 'Failed to create subject');
+    }
+  };
+
+  const handleBulkImportUnits = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    
+    if (!bulkUnits.trim()) {
+      setError('Please enter unit data');
+      return;
+    }
+
+    try {
+      // Parse the JSON format
+      let units;
+      try {
+        units = JSON.parse(bulkUnits.trim());
+        if (!Array.isArray(units)) {
+          throw new Error('Data must be an array');
+        }
+      } catch (parseError) {
+        setError('Invalid JSON format. Please check your JSON syntax.');
+        return;
+      }
+
+      // Validate the units structure
+      const validatedUnits = units.map((unit, index) => {
+        if (!unit.title) {
+          throw new Error(`Unit ${index + 1} is missing a title`);
+        }
+        return {
+          title: unit.title,
+          number: unit.number || index + 1,
+          description: unit.description || ''
+        };
+      });
+
+      console.log('Bulk importing units:', validatedUnits);
+      
+      const response = await axios.post(`/units/bulk`, {
+        courseId: selectedCourse.id,
+        units: validatedUnits
+      });
+
+      console.log('Bulk import response:', response.data);
+      console.log('Created units:', response.data.createdUnits);
+      setBulkUnits('');
+      setShowBulkImport(false);
+      setSuccess(`Successfully imported ${validatedUnits.length} units!`);
+      
+      // Force refresh courses with cache busting
+      console.log('Refreshing courses after bulk import...');
+      await fetchCourses();
+      console.log('Courses refreshed after bulk import');
+      
+      // Update selectedCourse with the refreshed data
+      const refreshedCourse = courses.find(c => c.id === selectedCourse.id);
+      if (refreshedCourse) {
+        console.log('Updating selectedCourse with refreshed data');
+        setSelectedCourse(refreshedCourse);
+      } else {
+        // If we can't find it in the courses array, fetch the specific course
+        console.log('Fetching updated course data directly');
+        try {
+          const courseResponse = await axios.get(`/courses/${selectedCourse.id}`);
+          setSelectedCourse(courseResponse.data);
+        } catch (err) {
+          console.error('Failed to fetch updated course:', err);
+        }
+      }
+    } catch (err: any) {
+      console.error('Bulk import error:', err);
+      if (err.message && err.message.includes('JSON')) {
+        setError(err.message);
+      } else {
+        setError(err.response?.data?.message || 'Failed to import units');
+      }
+    }
+  };
+
+  const handleCourseSelect = (course: any) => {
+    console.log('Course selected:', course);
+    console.log('Course units:', course.units);
+    console.log('Course units length:', course.units?.length || 0);
+    setSelectedCourse(course);
+    setViewMode('units');
+  };
+
+  const handleBackToCourses = () => {
+    setSelectedCourse(null);
+    setViewMode('courses');
+  };
+
+  const handleCreateAssignment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+
+    console.log('🎯 Creating assignment with data:', newAssignment);
+
+    try {
+      // Structure the questions data based on assignment type
+      let questionsData = null;
+      
+      if (newAssignment.type === 'multiple-choice') {
+        questionsData = {
+          type: 'multiple-choice',
+          question: newAssignment.question,
+          options: newAssignment.options.filter(opt => opt.trim()),
+          correctAnswer: newAssignment.correctAnswer,
+          correctAnswerIndex: newAssignment.correctAnswerIndex,
+          explanation: newAssignment.explanation || null,
+          incorrectExplanations: newAssignment.incorrectExplanations || null
+        };
+      } else if (newAssignment.type === 'true-false') {
+        questionsData = {
+          type: 'true-false',
+          statements: newAssignment.statements.filter(stmt => stmt.trim()),
+          answers: newAssignment.answers
+        };
+      } else if (newAssignment.type === 'matching') {
+        questionsData = {
+          type: 'matching',
+          leftItems: newAssignment.leftItems.filter(item => item.trim()),
+          rightItems: newAssignment.rightItems.filter(item => item.trim())
+        };
+      } else if (newAssignment.type === 'drag-and-drop') {
+        questionsData = {
+          type: 'drag-and-drop',
+          subtype: newAssignment.subtype,
+          sentence: newAssignment.sentence,
+          wordBank: newAssignment.wordBank.filter(word => word.trim()),
+          images: newAssignment.images,
+          captions: newAssignment.captions.filter(caption => caption.trim()),
+          orderItems: newAssignment.orderItems.filter(item => item.trim())
+        };
+      }
+
+      // Process bulk questions if provided
+      let bulkQuestionsData = null;
+      if (newAssignment.bulkQuestions && newAssignment.bulkQuestions.trim()) {
+        bulkQuestionsData = newAssignment.bulkQuestions;
+      }
+
+      const assignmentData = {
+        title: newAssignment.title,
+        description: newAssignment.description,
+        type: newAssignment.type,
+        subtype: newAssignment.subtype,
+        category: newAssignment.category,
+        difficulty: newAssignment.difficulty,
+        timeLimit: newAssignment.timeLimit ? parseInt(newAssignment.timeLimit) : undefined,
+        points: newAssignment.points,
+        instructions: newAssignment.instructions,
+        criteria: newAssignment.criteria,
+        autoGrade: newAssignment.autoGrade,
+        showFeedback: newAssignment.showFeedback,
+        dueDate: newAssignment.dueDate || undefined,
+        availableFrom: newAssignment.availableFrom || undefined,
+        availableTo: newAssignment.availableTo || undefined,
+        quarter: newAssignment.quarter,
+        maxAttempts: newAssignment.maxAttempts ? parseInt(newAssignment.maxAttempts) : undefined,
+        shuffleQuestions: newAssignment.shuffleQuestions,
+        allowReview: newAssignment.allowReview,
+        tags: newAssignment.tags,
+        courseId: newAssignment.courseId || undefined,
+        unitId: newAssignment.unitId || undefined,
+        partId: newAssignment.partId || undefined,
+        sectionId: newAssignment.sectionId || undefined,
+        topicId: newAssignment.topicId || undefined,
+        published: newAssignment.published,
+        questions: questionsData,
+        bulkQuestions: bulkQuestionsData,
+        recommendations: newAssignment.recommendations,
+        difficultyLevel: newAssignment.difficultyLevel,
+        learningObjectives: newAssignment.learningObjectives,
+        trackAttempts: newAssignment.trackAttempts,
+        trackConfidence: newAssignment.trackConfidence,
+        trackTimeSpent: newAssignment.trackTimeSpent,
+        engagementDeadline: newAssignment.engagementDeadline ? parseInt(newAssignment.engagementDeadline) : undefined,
+        lateSubmissionPenalty: newAssignment.lateSubmissionPenalty || 0
+      };
+
+      console.log('📤 Sending assignment data to backend:', assignmentData);
+      const response = await axios.post('/assignments', assignmentData);
+      console.log('✅ Assignment created successfully:', response.data);
+      setSuccess('Assignment created successfully!');
+      setShowCreateAssignment(false);
+      setNewAssignment({
+        title: '',
+        description: '',
+        type: '',
+        subtype: '',
+        category: '',
+        difficulty: 'beginner',
+        timeLimit: '',
+        points: 1,
+        instructions: '',
+        criteria: '',
+        autoGrade: true,
+        showFeedback: true,
+        dueDate: '',
+        availableFrom: '',
+        availableTo: '',
+        quarter: 'Q1',
+        maxAttempts: '',
+        shuffleQuestions: false,
+        allowReview: true,
+        tags: [],
+        courseId: '',
+        unitId: '',
+        partId: '',
+        sectionId: '',
+        topicId: '',
+        published: true,
+        question: '',
+        options: [],
+        correctAnswer: '',
+        correctAnswerIndex: -1,
+        explanation: '',
+        incorrectExplanations: {},
+        // Recommendation fields
+        recommendations: {},
+        negativeScoreThreshold: 0,
+        recommendedCourses: [],
+        difficultyLevel: 'beginner',
+        learningObjectives: [],
+        // Engagement and tracking fields
+        trackAttempts: true,
+        trackConfidence: true,
+        trackTimeSpent: true,
+        engagementDeadline: '',
+        lateSubmissionPenalty: 0,
+        statements: [],
+        answers: [],
+        leftItems: [],
+        rightItems: [],
+        sentence: '',
+        wordBank: [],
+        images: [],
+        captions: [],
+        orderItems: [],
+        bulkQuestions: ''
+      });
+      fetchAssignments();
+    } catch (err: any) {
+      console.error('❌ Error creating assignment:', err);
+      console.error('❌ Error details:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status
+      });
+      setError(err.response?.data?.message || 'Failed to create assignment');
+    }
+  };
+
+  const handleDeleteAssignment = async (assignmentId: string) => {
+    if (window.confirm('Are you sure you want to delete this assignment?')) {
+      try {
+        await axios.delete(`/assignments/${assignmentId}`);
+        setSuccess('Assignment deleted successfully!');
+        fetchAssignments();
+      } catch (err: any) {
+        setError(err.response?.data?.message || 'Failed to delete assignment');
+      }
+    }
+  };
+
+  const handleEditAssignment = (assignment: any) => {
+    // Format dates for datetime-local inputs
+    const formatDateForInput = (dateString: string | null) => {
+      if (!dateString) return '';
+      const date = new Date(dateString);
+      return date.toISOString().slice(0, 16); // Format: YYYY-MM-DDTHH:MM
+    };
+
+    // Ensure questions are properly structured for editing
+    let formattedQuestions = assignment.questions;
+    
+    // If questions is a string, try to parse it as JSON
+    if (typeof assignment.questions === 'string') {
+      try {
+        formattedQuestions = JSON.parse(assignment.questions);
+      } catch (e) {
+        console.warn('Failed to parse questions JSON:', e);
+        formattedQuestions = null;
+      }
+    }
+    
+    // If questions is null/undefined, create a default structure
+    if (!formattedQuestions) {
+      formattedQuestions = {
+        text: assignment.question || '',
+        options: assignment.options || [],
+        correctAnswer: assignment.correctAnswer || '',
+        explanation: assignment.explanation || ''
+      };
+    }
+
+    const formattedAssignment = {
+      ...assignment,
+      dueDate: formatDateForInput(assignment.dueDate),
+      availableFrom: formatDateForInput(assignment.availableFrom),
+      availableTo: formatDateForInput(assignment.availableTo),
+      questions: formattedQuestions
+    };
+
+    console.log('📝 Editing assignment:', formattedAssignment);
+    console.log('📝 Questions data:', formattedQuestions);
+    setEditingAssignment(formattedAssignment);
+    setShowEditAssignment(true);
+  };
+
+  const handleUpdateAssignment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+
+    console.log('🎯 Updating assignment...');
+    console.log('📝 Assignment data:', editingAssignment);
+
+    try {
+      console.log('📝 Updating assignment with data:', editingAssignment);
+      
+      const updateData = {
+        title: editingAssignment.title,
+        description: editingAssignment.description,
+        published: editingAssignment.published,
+        availableFrom: editingAssignment.availableFrom || null,
+        availableTo: editingAssignment.availableTo || null,
+        dueDate: editingAssignment.dueDate || null,
+        questions: editingAssignment.questions // Include questions in update
+      };
+
+      console.log('📤 Sending update data:', updateData);
+
+      const response = await axios.patch(`/assignments/${editingAssignment.id}`, updateData);
+      console.log('✅ Assignment updated successfully:', response.data);
+      setSuccess('Assignment updated successfully!');
+      setShowEditAssignment(false);
+      setEditingAssignment(null);
+      fetchAssignments();
+    } catch (err: any) {
+      console.error('❌ Error updating assignment:', err);
+      console.error('❌ Error details:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status
+      });
+      setError(err.response?.data?.message || 'Failed to update assignment');
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    window.location.href = '/login';
+  };
+
+  const sidebarMenu = [
+    { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+    { id: 'course-structure', label: 'Subjects & Courses', icon: '📚' },
+    { id: 'assignments', label: 'Assignments', icon: '📝' },
+    { id: 'assessment-creator', label: 'Assessment Creator', icon: '🎯' },
+    { id: 'resources', label: 'Resources', icon: '📁' },
+    { id: 'students', label: 'Students', icon: '👥' },
+    { id: 'class-view', label: 'Class View', icon: '🏫' },
+    { id: 'progress', label: 'Progress Tracking', icon: '📈' },
+  ];
+
+  const renderDashboard = () => (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="card">
+          <h3 className="text-lg font-semibold mb-2">Total Subjects</h3>
+          <p className="text-3xl font-bold text-indigo-600">{subjects.length}</p>
+        </div>
+        <div className="card">
+          <h3 className="text-lg font-semibold mb-2">Total Courses</h3>
+          <p className="text-3xl font-bold text-blue-600">{courses.length}</p>
+        </div>
+        <div className="card">
+          <h3 className="text-lg font-semibold mb-2">Total Units</h3>
+          <p className="text-3xl font-bold text-green-600">
+            {courses.reduce((total, course) => total + (course.units?.length || 0), 0)}
+          </p>
+        </div>
+        <div className="card">
+          <h3 className="text-lg font-semibold mb-2">Total Assignments</h3>
+          <p className="text-3xl font-bold text-orange-600">{assignments.length}</p>
+        </div>
+        <div className="card">
+          <h3 className="text-lg font-semibold mb-2">Total Students</h3>
+          <p className="text-3xl font-bold text-purple-600">0</p>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderCourseStructure = () => (
+    <div className="space-y-6">
+      {/* Subject Creation */}
+      <div className="card">
+        <h2 className="text-xl font-semibold mb-4">Subject Management</h2>
+        <form onSubmit={handleCreateSubject} className="mb-6">
+          <div className="space-y-4">
+            <div className="grid grid-cols-12 gap-4">
+              <div className="col-span-6">
+                <input
+                  type="text"
+                  placeholder="Subject name (e.g., English, Mathematics, Science)"
+                  value={newSubject.name}
+                  onChange={(e) => setNewSubject(prev => ({ ...prev, name: e.target.value }))}
+                  className="form-input w-full"
+                  required
+                />
+              </div>
+              <div className="col-span-6">
+                <button type="submit" className="btn-primary w-full">
+                  Create Subject
+                </button>
+              </div>
+            </div>
+            <textarea
+              placeholder="Subject description (optional)"
+              value={newSubject.description}
+              onChange={(e) => setNewSubject(prev => ({ ...prev, description: e.target.value }))}
+              className="form-textarea w-full"
+              rows={2}
+            />
+          </div>
+        </form>
+
+        <div className="mb-6">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-medium">Available Subjects</h3>
+            <div className="flex space-x-2">
+              <button
+                onClick={fetchSubjects}
+                className="text-sm text-blue-600 hover:text-blue-800"
+              >
+                Refresh Subjects
+              </button>
+              {process.env.NODE_ENV === 'development' && (
+                <button
+                  onClick={async () => {
+                    try {
+                      console.log('Testing debug endpoint...');
+                      const res = await axios.get('/subjects/debug/all');
+                      console.log('Debug response:', res.data);
+                    } catch (err: any) {
+                      console.error('Debug endpoint error:', err);
+                    }
+                  }}
+                  className="text-sm text-red-600 hover:text-red-800"
+                >
+                  Debug All
+                </button>
+              )}
+            </div>
+          </div>
+          {/* Debug info */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="text-xs text-gray-400 mb-2">
+              Debug: {subjects.length} subjects loaded
+            </div>
+          )}
+          {subjects.length === 0 ? (
+            <p className="text-gray-500">No subjects found. Create your first subject above.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {subjects.map((subject: any) => (
+                <div key={subject.id} className="border rounded-lg p-4 bg-white">
+                  <h4 className="font-medium text-gray-900">{subject.name}</h4>
+                  {subject.description && (
+                    <p className="text-sm text-gray-500 mt-1">{subject.description}</p>
+                  )}
+                  <p className="text-xs text-gray-400 mt-2">
+                    {subject.courses?.length || 0} courses
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Course Creation */}
+      <div className="card">
+        <h2 className="text-xl font-semibold mb-4">Course Management</h2>
+        {subjects.length === 0 && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+            <p className="text-sm text-yellow-700">
+              <strong>Note:</strong> You need to create at least one subject before you can create courses. 
+              Use the subject creation form above to add subjects like "English", "Mathematics", "Science", etc.
+            </p>
+          </div>
+        )}
+        <form onSubmit={handleCreateCourse} className="mb-6">
+          <div className="space-y-4">
+            <div className="grid grid-cols-12 gap-4">
+              <div className="col-span-6">
+                <input
+                  type="text"
+                  placeholder="Course name (e.g., Project Explore 2, Let's Find Out)"
+                  value={newCourse.name}
+                  onChange={(e) => setNewCourse(prev => ({ ...prev, name: e.target.value }))}
+                  className="form-input w-full"
+                  required
+                />
+              </div>
+              <div className="col-span-6">
+            <select
+                  value={newCourse.subjectId}
+                  onChange={(e) => setNewCourse(prev => ({ ...prev, subjectId: e.target.value }))}
+                  className="form-select w-full"
+              required
+                >
+                  <option value="">Select Subject</option>
+                  {subjects.length === 0 ? (
+                    <option value="" disabled>No subjects available - create a subject first</option>
+                  ) : (
+                    subjects.map((subject: any) => (
+                      <option key={subject.id} value={subject.id}>
+                        {subject.name}
+                      </option>
+                    ))
+                  )}
+            </select>
+          </div>
+            </div>
+            <textarea
+              placeholder="Course description"
+              value={newCourse.description}
+              onChange={(e) => setNewCourse(prev => ({ ...prev, description: e.target.value }))}
+              className="form-textarea w-full"
+              rows={3}
+            />
+            <button type="submit" className="btn-primary">
+              Create Course
+          </button>
+      </div>
+        </form>
+
+        {error && <div className="text-red-600 mb-4">{error}</div>}
+        {success && <div className="text-green-600 mb-4">{success}</div>}
+
+        <div>
+          <h3 className="text-lg font-medium mb-4">All Courses</h3>
+          {loading ? (
+            <p className="text-gray-500">Loading courses...</p>
+          ) : courses.length === 0 ? (
+            <p className="text-gray-500">No courses found.</p>
+          ) : viewMode === 'courses' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {courses.map((course: any) => (
+                <div key={course.id} className="border rounded-lg p-4 bg-white hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleCourseSelect(course)}>
+                  {/* Debug info */}
+                  {process.env.NODE_ENV === 'development' && (
+                    <div className="text-xs text-gray-400 mb-2">
+                      Debug: Course {course.name} has {course.units?.length || 0} units
+              </div>
+                  )}
+                  <div className="space-y-2">
+                    <div>
+                      <h4 className="font-medium text-gray-900">{course.name}</h4>
+                      <p className="text-sm text-gray-600">
+                        {course.subject?.name}
+                      </p>
+          </div>
+                    {course.description && (
+                      <p className="text-sm text-gray-500 line-clamp-2">{course.description}</p>
+                    )}
+                    <div className="flex items-center justify-between pt-2">
+                      <div className="text-sm text-gray-500">
+                        {course.units?.length || 0} units
+                </div>
+                      <div className="flex space-x-1">
+                  <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // TODO: Add edit functionality
+                            console.log('Edit course:', course.id);
+                          }}
+                          className="text-yellow-600 hover:text-yellow-800 text-xs font-medium"
+                  >
+                    Edit
+                  </button>
+                  <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm(`Are you sure you want to delete "${course.name}"? This action cannot be undone.`)) {
+                              try {
+                                axios.delete(`/courses/${course.id}`);
+                                setSuccess(`Course "${course.name}" deleted successfully`);
+                                fetchCourses();
+                        } catch (err: any) {
+                                setError(err.response?.data?.message || 'Failed to delete course');
+                        }
+                      }
+                    }}
+                          className="text-red-600 hover:text-red-800 text-xs font-medium"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+          </div>
+      </div>
+              ))}
+            </div>
+          ) : viewMode === 'units' && selectedCourse ? (
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+              <button
+                    onClick={handleBackToCourses}
+                    className="text-blue-600 hover:text-blue-800 text-sm font-medium mb-2"
+              >
+                    ← Back to Courses
+              </button>
+                  <h3 className="text-lg font-medium">{selectedCourse.name} - Units</h3>
+                  <p className="text-sm text-gray-600">
+                    {selectedCourse.subject?.name}
+                  </p>
+            </div>
+                <div className="flex items-center space-x-4">
+                  <div className="text-sm text-gray-500">
+                    {selectedCourse.units?.length || 0} units
+                  </div>
+                  <button
+                    onClick={() => setShowBulkImport(!showBulkImport)}
+                    className="text-sm text-green-600 hover:text-green-800 font-medium"
+                  >
+                    {showBulkImport ? 'Cancel Bulk Import' : 'Bulk Import Units'}
+                  </button>
+                  {process.env.NODE_ENV === 'development' && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          console.log('Testing debug endpoint for course:', selectedCourse.id);
+                          const res = await axios.get(`/units/debug/course/${selectedCourse.id}`);
+                          console.log('Debug response:', res.data);
+                        } catch (err: any) {
+                          console.error('Debug endpoint error:', err);
+                        }
+                      }}
+                      className="text-sm text-red-600 hover:text-red-800 font-medium"
+                    >
+                      Debug Units
+                    </button>
+                  )}
+                </div>
+      </div>
+
+      {/* Bulk Import Form */}
+      {showBulkImport && (
+        <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+          <h4 className="font-medium text-gray-900 mb-2">Bulk Import Units</h4>
+          <p className="text-sm text-gray-600 mb-4">
+            Enter unit data in JSON format. Each unit should have a title, number, and optional description:
+          </p>
+          <form onSubmit={handleBulkImportUnits}>
+            <textarea
+              value={bulkUnits}
+              onChange={(e) => setBulkUnits(e.target.value)}
+              placeholder={`[
+  {
+    "title": "Getting Ready with Sounds and Words",
+    "number": 1,
+    "description": "Phonemic awareness, basic classroom vocabulary, and introduction routines in English"
+  },
+  {
+    "title": "Everyday Listening and Speaking",
+    "number": 2,
+    "description": "Listening to instructions and responding with simple phrases and questions"
+  },
+  {
+    "title": "Reading Basics",
+    "number": 3,
+    "description": "Understanding short texts; decoding strategies using phonics and sight words"
+  }
+]`}
+              className="form-textarea w-full mb-4"
+              rows={12}
+            />
+            <div className="flex space-x-2">
+              <button type="submit" className="btn-primary">
+                Import Units
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowBulkImport(false)}
+                className="btn-secondary"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+              
+                            {selectedCourse.units && selectedCourse.units.length > 0 ? (
+                <div>
+                  <div className="text-sm text-gray-500 mb-2">
+                    Debug: Found {selectedCourse.units.length} units
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {selectedCourse.units.map((unit: any) => (
+                      <div key={unit.id} className="bg-gray-50 rounded-lg p-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="font-medium text-sm text-gray-900">
+                              Unit {unit.order}: {unit.name}
+                            </div>
+                            {unit.description && (
+                              <div className="text-xs text-gray-600 mt-1">
+                                {unit.description}
+                              </div>
+                            )}
+                            {unit.parts && unit.parts.length > 0 && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                {unit.parts.length} parts
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex space-x-1">
+                            <button
+                              onClick={() => {
+                                // TODO: Add unit editing functionality
+                                console.log('Edit unit:', unit.id);
+                              }}
+                              className="text-blue-600 hover:text-blue-800 text-xs"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (window.confirm(`Are you sure you want to delete unit "${unit.name}"?`)) {
+                                  try {
+                                    await axios.delete(`/units/${unit.id}`);
+                                    setSuccess(`Unit "${unit.name}" deleted successfully`);
+                                    fetchCourses();
+                                  } catch (err: any) {
+                                    setError(err.response?.data?.message || 'Failed to delete unit');
+                                  }
+                                }
+                              }}
+                              className="text-red-600 hover:text-red-800 text-xs"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <p className="text-sm text-gray-500">No units found for this course.</p>
+              </div>
+            )}
+            </div>
+          ) : null}
+          </div>
+        </div>
+      </div>
+    );
+
+  const renderResources = () => (
+      <div className="space-y-6">
+        <div className="card">
+          <h2 className="text-xl font-semibold mb-4">Resource Management</h2>
+          
+          {/* Tabs */}
+          <div className="flex space-x-4 mb-6 border-b">
+            <button
+              type="button"
+            onClick={() => setResourceActiveTab('upload')}
+            className={`pb-2 px-1 ${resourceActiveTab === 'upload' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500'}`}
+            >
+              Upload New Resource
+            </button>
+            <button
+              type="button"
+            onClick={() => setResourceActiveTab('my-resources')}
+            className={`pb-2 px-1 ${resourceActiveTab === 'my-resources' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500'}`}
+            >
+              My Resources
+            </button>
+            <button
+              type="button"
+            onClick={() => setResourceActiveTab('shared')}
+            className={`pb-2 px-1 ${resourceActiveTab === 'shared' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500'}`}
+            >
+              Shared Resources
+            </button>
+          <button
+            type="button"
+            onClick={() => setResourceActiveTab('allocate')}
+            className={`pb-2 px-1 ${resourceActiveTab === 'allocate' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500'}`}
+          >
+            Allocate Resources
+          </button>
+          </div>
+
+          {error && <div className="text-red-600 mb-2">{error}</div>}
+          {success && <div className="text-green-600 mb-2">{success}</div>}
+
+          {/* Upload Form */}
+        {resourceActiveTab === 'upload' && (
+            <form onSubmit={handleCreateResource} className="mb-6">
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <input
+                  type="text"
+                  placeholder="Resource title"
+                  value={newResource.title}
+                  onChange={e => setNewResource({ ...newResource, title: e.target.value })}
+                  className="form-input"
+                  required
+                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">File Upload</label>
+                                <input
+                  type="file"
+                  multiple
+                  onChange={handleFileSelect}
+                  className="form-input"
+                  accept="audio/*,video/*,application/pdf,image/*"
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Supported: Audio (MP3, WAV, OGG), Video (MP4, WebM, AVI), PDF, Images (JPEG, PNG, GIF)
+                </p>
+                {selectedFiles.length > 0 && (
+                  <div className="text-xs text-green-600 mt-1">
+                    <p className="font-medium">Selected Files ({selectedFiles.length}):</p>
+                    {selectedFiles.map((file, index) => (
+                      <p key={index} className="ml-2">
+                        • {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                      </p>
+                    ))}
+                  </div>
+                )}
+                </div>
+              </div>
+              
+              <textarea
+                placeholder="Description (optional)"
+                value={newResource.description}
+                onChange={e => setNewResource({ ...newResource, description: e.target.value })}
+                className="form-input w-full"
+                rows={3}
+              />
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <select
+                  value={newResource.courseId}
+                  onChange={e => handleCourseChange(e.target.value)}
+                  className="form-input"
+                >
+                  <option value="">Select course (optional)</option>
+                  {courses.map(course => (
+                    <option key={course.id} value={course.id}>
+                      {course.name} - {course.subject?.name} ({course.yearLevel})
+                    </option>
+                  ))}
+                </select>
+                
+                <select
+                  value={newResource.unitId}
+                  onChange={e => setNewResource({ ...newResource, unitId: e.target.value })}
+                  className="form-input"
+                  disabled={!newResource.courseId}
+                >
+                  <option value="">
+                    {newResource.courseId ? 'Select unit (optional)' : 'Select a course first'}
+                  </option>
+                  {selectedCourseUnits.map(unit => (
+                    <option key={unit.id} value={unit.id}>
+                      Unit {unit.order}: {unit.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className="flex items-center gap-4">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={newResource.isPublic}
+                    onChange={e => setNewResource({ ...newResource, isPublic: e.target.checked })}
+                    className="mr-2"
+                  />
+                  Make public
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={newResource.isShared}
+                    onChange={e => setNewResource({ ...newResource, isShared: e.target.checked })}
+                    className="mr-2"
+                  />
+                  Make shared template
+                </label>
+              </div>
+              
+              <button
+                type="submit"
+                disabled={uploadProgress > 0}
+                className="btn-primary w-full"
+              >
+                {uploadProgress > 0 ? `Uploading... ${uploadProgress}%` : 'Upload Resource'}
+              </button>
+            </div>
+          </form>
+          )}
+
+        {/* My Resources */}
+        {resourceActiveTab === 'my-resources' && (
+            <div>
+              <h3 className="text-lg font-medium mb-4">My Resources</h3>
+            {loading ? (
+              <p className="text-gray-500">Loading resources...</p>
+            ) : resources.length === 0 ? (
+              <p className="text-gray-500">No resources found.</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {resources.map((resource: any) => (
+                  <div key={resource.id} className="border rounded-lg p-4 bg-white">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-2">
+                        <span className="text-2xl">{getFileIcon(resource.type)}</span>
+                          <h4 className="font-medium text-gray-900">{resource.title}</h4>
+                        </div>
+                        {resource.description && (
+                          <p className="text-sm text-gray-600 mb-2">{resource.description}</p>
+                        )}
+                        <div className="text-xs text-gray-500 space-y-1">
+                          <p>Size: {formatFileSize(resource.fileSize || 0)}</p>
+                          {resource.course && (
+                            <p>Course: {resource.course.name}</p>
+                          )}
+                          {resource.unit && (
+                            <p>Unit: {resource.unit.name}</p>
+                          )}
+                          <p>Uploaded: {new Date(resource.createdAt).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteResource(resource.id)}
+                        className="text-red-600 hover:text-red-800 text-sm"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          )}
+
+        {/* Shared Resources */}
+        {resourceActiveTab === 'shared' && (
+            <div>
+            <h3 className="text-lg font-medium mb-4">Shared Resources</h3>
+            {sharedResources.length === 0 ? (
+                <p className="text-gray-500">No shared resources found.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {sharedResources.map((resource: any) => (
+                  <div key={resource.id} className="border rounded-lg p-4 bg-white">
+                    <div className="flex items-start">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <span className="text-2xl">{getFileIcon(resource.type)}</span>
+                          <h4 className="font-medium text-gray-900">{resource.title}</h4>
+                          </div>
+                      {resource.description && (
+                          <p className="text-sm text-gray-600 mb-2">{resource.description}</p>
+                        )}
+                        <div className="text-xs text-gray-500 space-y-1">
+                          <p>Size: {formatFileSize(resource.fileSize || 0)}</p>
+                          <p>Shared by: {resource.createdBy?.firstName} {resource.createdBy?.lastName}</p>
+                          <p>Shared: {new Date(resource.createdAt).toLocaleDateString()}</p>
+                      </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+        {/* Resource Allocation */}
+        {resourceActiveTab === 'allocate' && (
+          <div className="space-y-6">
+            {/* Assignment Selection */}
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h3 className="text-lg font-medium mb-4">Select Assignment</h3>
+              <select
+                value={selectedAssignment}
+                onChange={(e) => setSelectedAssignment(e.target.value)}
+                className="form-select w-full max-w-md"
+              >
+                <option value="">Choose an assignment...</option>
+                {assignments.map((assignment: any) => (
+                  <option key={assignment.id} value={assignment.id}>
+                    {assignment.title} - {assignment.course?.name || 'No Course'} - {assignment.unit?.name || 'No Unit'}
+                  </option>
+                ))}
+              </select>
+        </div>
+
+            {/* Resource Selection */}
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h3 className="text-lg font-medium mb-4">Select Resources to Allocate</h3>
+              
+              {/* Search and Filter */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <input
+                    type="text"
+                  placeholder="Search resources..."
+                  value={resourceSearch}
+                  onChange={(e) => setResourceSearch(e.target.value)}
+                    className="form-input"
+                  />
+                  <select
+                  value={resourceTypeFilter}
+                  onChange={(e) => setResourceTypeFilter(e.target.value)}
+                    className="form-select"
+                >
+                  <option value="">All types</option>
+                  <option value="audio">Audio</option>
+                  <option value="video">Video</option>
+                  <option value="pdf">PDF</option>
+                  <option value="image">Image</option>
+                  </select>
+                </div>
+
+              {/* Selection Controls */}
+              <div className="flex space-x-2 mb-4">
+                        <button
+                  onClick={handleSelectAllResources}
+                  className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                        >
+                  Select All Filtered
+                        </button>
+                        <button
+                  onClick={handleClearSelection}
+                  className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                >
+                  Clear Selection
+                        </button>
+                <span className="px-3 py-1 text-sm text-gray-600">
+                  {selectedResources.length} selected
+                </span>
+                      </div>
+
+              {/* Resource List */}
+              <div className="max-h-96 overflow-y-auto border rounded-lg bg-white">
+                {getFilteredResources().length === 0 ? (
+                  <p className="p-4 text-gray-500">No resources found.</p>
+                ) : (
+                  <div className="divide-y">
+                    {getFilteredResources().map((resource: any) => (
+                      <div key={resource.id} className="p-4 hover:bg-gray-50">
+                        <label className="flex items-start space-x-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedResources.includes(resource.id)}
+                            onChange={() => handleResourceSelection(resource.id)}
+                            className="mt-1"
+                          />
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-xl">{getFileIcon(resource.type)}</span>
+                              <h4 className="font-medium text-gray-900">{resource.title}</h4>
+                    </div>
+                            {resource.description && (
+                              <p className="text-sm text-gray-600 mt-1">{resource.description}</p>
+          )}
+                            <div className="text-xs text-gray-500 mt-1">
+                              Size: {formatFileSize(resource.fileSize || 0)} | 
+                              Type: {resource.type} | 
+                              Uploaded: {new Date(resource.createdAt).toLocaleDateString()}
+          </div>
+        </div>
+                        </label>
+                </div>
+                    ))}
+                </div>
+                )}
+                </div>
+
+              {/* Allocate Button */}
+              <div className="mt-4">
+                  <button
+                  onClick={handleAllocateResources}
+                  disabled={!selectedAssignment || selectedResources.length === 0 || allocationLoading}
+                  className={`w-full px-4 py-2 rounded-lg font-semibold transition-colors ${
+                    !selectedAssignment || selectedResources.length === 0 || allocationLoading
+                      ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  }`}
+                >
+                  {allocationLoading ? 'Allocating...' : `Allocate ${selectedResources.length} Resource(s) to Assignment`}
+                  </button>
+                  <div className="mt-2 text-xs text-gray-500">
+                    Debug: Assignment={selectedAssignment ? 'Selected' : 'None'}, Resources={selectedResources.length}
+                  </div>
+                </div>
+            </div>
+
+            {/* Current Allocations */}
+            {selectedAssignment && (
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h3 className="text-lg font-medium mb-4">Current Assignment Resources</h3>
+                {(() => {
+                  const assignment = assignments.find(a => a.id === selectedAssignment);
+                  const assignedResources = assignment?.resources || [];
+                  
+                  return assignedResources.length === 0 ? (
+                    <p className="text-gray-500">No resources allocated to this assignment yet.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {assignedResources.map((resource: any) => (
+                        <div key={resource.id} className="border rounded-lg p-3 bg-white">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2 mb-1">
+                                <span className="text-lg">{getFileIcon(resource.type)}</span>
+                                <h4 className="font-medium text-sm text-gray-900">{resource.title}</h4>
+                      </div>
+                              <div className="text-xs text-gray-500">
+                                {formatFileSize(resource.fileSize || 0)}
+                      </div>
+                  </div>
+                            <button
+                              onClick={() => handleRemoveResourceFromAssignment(selectedAssignment, resource.id)}
+                              className="text-red-600 hover:text-red-800 text-xs"
+                            >
+                              Remove
+                            </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  );
+                })()}
+                </div>
+            )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+
+  const renderStudents = () => (
+    <div className="space-y-6">
+      <div className="card">
+        <h2 className="text-xl font-semibold mb-4">Student Management</h2>
+        <p className="text-gray-600">Student management coming soon...</p>
+      </div>
+    </div>
+  );
+
+  const renderAssessmentCreator = () => (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold">Assessment Creator</h2>
+        <button
+          onClick={() => window.location.href = '/assessment-creator'}
+          className="btn-primary"
+        >
+          Create New Assessment
+        </button>
+      </div>
+      
+      <div className="bg-white rounded-lg shadow-sm p-6">
+        <h3 className="text-lg font-semibold mb-4">Assessment Types</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[
+            { type: 'multiple-choice', label: 'Multiple Choice', icon: '🔘', desc: 'Auto-graded questions with one correct answer' },
+            { type: 'true-false', label: 'True/False', icon: '✅', desc: 'Simple true/false questions' },
+            { type: 'matching', label: 'Matching', icon: '🔗', desc: 'Match items from two columns' },
+            { type: 'drag-and-drop', label: 'Drag & Drop', icon: '🎯', desc: 'Interactive drag and drop activities' },
+            { type: 'writing', label: 'Writing (Short)', icon: '✍️', desc: 'Short answer writing questions' },
+            { type: 'writing-long', label: 'Writing (Long)', icon: '📝', desc: 'Extended writing assignments' },
+            { type: 'speaking', label: 'Speaking', icon: '🎤', desc: 'Oral response assignments' },
+            { type: 'listening', label: 'Listening', icon: '🎧', desc: 'Audio-based questions' },
+            { type: 'assignment', label: 'Assignment', icon: '📋', desc: 'General assignment type' }
+          ].map((assessmentType) => (
+            <div key={assessmentType.type} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+              <div className="flex items-center mb-2">
+                <span className="text-2xl mr-3">{assessmentType.icon}</span>
+                <h4 className="font-semibold text-gray-900">{assessmentType.label}</h4>
+              </div>
+              <p className="text-sm text-gray-600 mb-3">{assessmentType.desc}</p>
+              <button
+                onClick={() => {
+                  console.log('🎯 Create Assessment Type button clicked:', assessmentType.type);
+                  console.log('📊 Setting assignment type to:', assessmentType.type);
+                  setNewAssignment(prev => ({ ...prev, type: assessmentType.type }));
+                  setShowCreateAssignment(true);
+                  console.log('✅ Form should now be visible with type:', assessmentType.type);
+                }}
+                className="w-full px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              >
+                Create {assessmentType.label}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderAssignments = () => (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold">Assignments</h2>
+        <button
+          onClick={() => {
+            console.log('🎯 Create Assignment button clicked');
+            console.log('📊 Current showCreateAssignment state:', showCreateAssignment);
+            setShowCreateAssignment(!showCreateAssignment);
+          }}
+          className="btn-primary"
+        >
+          {showCreateAssignment ? 'Cancel' : 'Create Assignment'}
+        </button>
+      </div>
+
+      {/* Create Assignment Form */}
+      {showCreateAssignment && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">Create New Assignment</h3>
+            {newAssignment.type && (
+              <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+                Type: {newAssignment.type}
+              </span>
+            )}
+          </div>
+          <form onSubmit={handleCreateAssignment} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Title *
+                </label>
+                <input
+                  type="text"
+                  id="assignment-title"
+                  name="assignment-title"
+                  value={newAssignment.title}
+                  onChange={(e) => setNewAssignment(prev => ({ ...prev, title: e.target.value }))}
+                  className="form-input w-full"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Type
+                </label>
+                <select
+                  id="assignment-type"
+                  name="assignment-type"
+                  value={newAssignment.type}
+                  onChange={(e) => setNewAssignment(prev => ({ ...prev, type: e.target.value }))}
+                  className="form-select w-full"
+                >
+                  <option value="">Select assignment type...</option>
+                  <option value="multiple-choice">Multiple Choice Quiz</option>
+                  <option value="true-false">True/False Quiz</option>
+                  <option value="matching">Matching Exercise</option>
+                  <option value="drag-and-drop">Drag & Drop Activity</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Description
+              </label>
+              <textarea
+                id="assignment-description"
+                name="assignment-description"
+                value={newAssignment.description}
+                onChange={(e) => setNewAssignment(prev => ({ ...prev, description: e.target.value }))}
+                className="form-textarea w-full"
+                rows={3}
+              />
+            </div>
+
+            {/* Dynamic Content Based on Assignment Type */}
+            {newAssignment.type && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900">Assignment Content</h3>
+                  <span className="text-sm text-blue-600 font-medium">
+                    Debug: Type = {newAssignment.type}
+                  </span>
+                </div>
+                
+                {/* Multiple Choice Content */}
+                {newAssignment.type === 'multiple-choice' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Question
+                      </label>
+                      <textarea
+                        id="assignment-question"
+                        name="assignment-question"
+                        value={newAssignment.question || ''}
+                        onChange={(e) => setNewAssignment(prev => ({ ...prev, question: e.target.value }))}
+                        rows={1}
+                        className="form-textarea w-full resize-none overflow-hidden"
+                        placeholder="Enter your question here..."
+                        style={{ minHeight: '2.5rem', maxHeight: '10rem' }}
+                        onInput={(e) => {
+                          const target = e.target as HTMLTextAreaElement;
+                          target.style.height = 'auto';
+                          target.style.height = Math.min(target.scrollHeight, 10 * 16) + 'px';
+                        }}
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Options
+                      </label>
+                      <div className="space-y-2">
+                        {[0, 1, 2, 3].map((index) => (
+                          <div key={index} className="flex items-center space-x-3">
+                            <input
+                              type="radio"
+                              name="correctAnswer"
+                              value={index.toString()}
+                              checked={newAssignment.correctAnswerIndex === index}
+                              onChange={(e) => setNewAssignment(prev => ({ 
+                                ...prev, 
+                                correctAnswerIndex: parseInt(e.target.value),
+                                correctAnswer: prev.options[parseInt(e.target.value)] || ''
+                              }))}
+                              className="form-radio"
+                            />
+                            <input
+                              type="text"
+                              id={`assignment-option-${index}`}
+                              name={`assignment-option-${index}`}
+                              value={newAssignment.options[index] || ''}
+                              onChange={(e) => {
+                                const newOptions = [...(newAssignment.options || [])];
+                                newOptions[index] = e.target.value;
+                                setNewAssignment(prev => ({ 
+                                  ...prev, 
+                                  options: newOptions,
+                                  // Update correctAnswer if this was the previously selected option
+                                  correctAnswer: prev.correctAnswerIndex === index ? e.target.value : prev.correctAnswer
+                                }));
+                              }}
+                              className="form-input flex-1"
+                              placeholder={`Option ${String.fromCharCode(65 + index)}`}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Explanation Section */}
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Explanation for Correct Answer (Optional)
+                        </label>
+                        <textarea
+                          id="assignment-explanation"
+                          name="assignment-explanation"
+                          value={newAssignment.explanation || ''}
+                          onChange={(e) => setNewAssignment(prev => ({ ...prev, explanation: e.target.value }))}
+                          rows={2}
+                          className="form-textarea w-full"
+                          placeholder="Explain why this answer is correct..."
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Explanations for Incorrect Answers (Optional)
+                        </label>
+                        <textarea
+                          id="assignment-incorrect-explanations"
+                          name="assignment-incorrect-explanations"
+                          value={incorrectExplanationsText}
+                          onChange={e => setIncorrectExplanationsText(e.target.value)}
+                          onBlur={() => {
+                            try {
+                              if (incorrectExplanationsText.trim()) {
+                                const parsed = JSON.parse(incorrectExplanationsText);
+                                setNewAssignment(prev => ({ ...prev, incorrectExplanations: parsed }));
+                              } else {
+                                setNewAssignment(prev => ({ ...prev, incorrectExplanations: {} }));
+                              }
+                            } catch {
+                              // Optionally show error or keep as is
+                            }
+                          }}
+                          rows={4}
+                          className="form-textarea w-full"
+                          placeholder='{"London": "London is the capital of England, not France.", "Berlin": "Berlin is the capital of Germany, not France.", "Madrid": "Madrid is the capital of Spain, not France."}'
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          {`JSON format: {"option": "explanation"}`}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Learning Path & Recommendations Section */}
+                    <div className="space-y-4 border-t pt-4">
+                      <h4 className="text-md font-semibold text-gray-900">Learning Path & Recommendations</h4>
+                      
+
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Automatic Course Recommendations
+                        </label>
+                        <div className="space-y-2">
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">
+                              Negative Score Threshold
+                            </label>
+                            <input
+                              type="number"
+                              value={newAssignment.negativeScoreThreshold || ''}
+                              onChange={(e) => setNewAssignment(prev => ({ 
+                                ...prev, 
+                                negativeScoreThreshold: parseInt(e.target.value) || 0
+                              }))}
+                              className="form-input w-full"
+                              placeholder="5"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                              When student's negative score reaches this threshold, they get recommended for supplementary courses
+                            </p>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">
+                              Recommended Supplementary Courses
+                            </label>
+                            <textarea
+                              value={newAssignment.recommendedCourses?.join('\n') || ''}
+                              onChange={(e) => setNewAssignment(prev => ({ 
+                                ...prev, 
+                                recommendedCourses: e.target.value.split('\n').filter(course => course.trim())
+                              }))}
+                              rows={3}
+                              className="form-textarea w-full"
+                              placeholder="Reading Comprehension Basics&#10;Vocabulary Building Course&#10;Grammar Fundamentals"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                              One course per line. These will be recommended when students struggle with this assignment type.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Difficulty Level
+                        </label>
+                        <select
+                          value={newAssignment.difficultyLevel}
+                          onChange={(e) => setNewAssignment(prev => ({ ...prev, difficultyLevel: e.target.value }))}
+                          className="form-select w-full"
+                        >
+                          <option value="beginner">Beginner</option>
+                          <option value="intermediate">Intermediate</option>
+                          <option value="advanced">Advanced</option>
+                          <option value="expert">Expert</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Learning Objectives
+                        </label>
+                        <textarea
+                          value={newAssignment.learningObjectives?.join('\n') || ''}
+                          onChange={(e) => setNewAssignment(prev => ({ 
+                            ...prev, 
+                            learningObjectives: e.target.value.split('\n').filter(obj => obj.trim())
+                          }))}
+                          rows={3}
+                          className="form-textarea w-full"
+                          placeholder="Students will be able to identify basic grammar rules.&#10;Students will understand common vocabulary patterns.&#10;Students will practice reading comprehension skills."
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          One learning objective per line
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Engagement Tracking Section */}
+                    <div className="space-y-4 border-t pt-4">
+                      <h4 className="text-md font-semibold text-gray-900">Engagement & Progress Tracking</h4>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              checked={newAssignment.trackAttempts}
+                              onChange={(e) => setNewAssignment(prev => ({ ...prev, trackAttempts: e.target.checked }))}
+                              className="form-checkbox"
+                            />
+                            <span className="text-sm font-medium text-gray-700">Track Attempts per Question</span>
+                          </label>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Count how many times students try each question
+                          </p>
+                        </div>
+
+                        <div>
+                          <label className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              checked={newAssignment.trackConfidence}
+                              onChange={(e) => setNewAssignment(prev => ({ ...prev, trackConfidence: e.target.checked }))}
+                              className="form-checkbox"
+                            />
+                            <span className="text-sm font-medium text-gray-700">Track Confidence Level</span>
+                          </label>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Calculate confidence from attempt patterns
+                          </p>
+                        </div>
+
+                        <div>
+                          <label className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              checked={newAssignment.trackTimeSpent}
+                              onChange={(e) => setNewAssignment(prev => ({ ...prev, trackTimeSpent: e.target.checked }))}
+                              className="form-checkbox"
+                            />
+                            <span className="text-sm font-medium text-gray-700">Track Time Spent</span>
+                          </label>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Monitor how long students spend on each question
+                          </p>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Engagement Deadline (hours)
+                          </label>
+                          <input
+                            type="number"
+                            value={newAssignment.engagementDeadline || ''}
+                            onChange={(e) => setNewAssignment(prev => ({ 
+                              ...prev, 
+                              engagementDeadline: e.target.value
+                            }))}
+                            className="form-input w-full"
+                            placeholder="24"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Time limit for homework completion (0 = no deadline)
+                          </p>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Late Submission Penalty (%)
+                          </label>
+                          <input
+                            type="number"
+                            value={newAssignment.lateSubmissionPenalty || ''}
+                            onChange={(e) => setNewAssignment(prev => ({ 
+                              ...prev, 
+                              lateSubmissionPenalty: parseInt(e.target.value) || 0
+                            }))}
+                            className="form-input w-full"
+                            placeholder="10"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Score reduction for late submissions
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bulk Import Section */}
+                    <div className="border-t pt-4">
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="block text-sm font-medium text-gray-700">
+                          Bulk Import Questions (Optional)
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            try {
+                              if (newAssignment.bulkQuestions.trim()) {
+                                const parsed = JSON.parse(newAssignment.bulkQuestions);
+                                if (Array.isArray(parsed)) {
+                                  alert('✅ JSON format is valid! You can create the assignment.');
+                                } else {
+                                  alert('❌ JSON must be an array of questions.');
+                                }
+                              } else {
+                                alert('ℹ️ No bulk questions to validate.');
+                              }
+                            } catch (error) {
+                              alert('❌ Invalid JSON format. Please check your syntax.');
+                            }
+                          }}
+                          className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700"
+                        >
+                          Validate JSON
+                        </button>
+                      </div>
+                      <textarea
+                        value={newAssignment.bulkQuestions || ''}
+                        onChange={(e) => setNewAssignment(prev => ({ ...prev, bulkQuestions: e.target.value }))}
+                        rows={6}
+                        className="form-textarea w-full"
+                        placeholder={`JSON Format (recommended):
+[
+  {
+    "question": "What is the capital of France?",
+    "options": ["London", "Paris", "Berlin", "Madrid"],
+    "correctAnswer": "Paris",
+    "explanation": "Paris is the capital and largest city of France.",
+    "incorrectExplanations": {
+      "London": "London is the capital of England, not France.",
+      "Berlin": "Berlin is the capital of Germany, not France.",
+      "Madrid": "Madrid is the capital of Spain, not France."
+    }
+  }
+]
+
+Simple Format (basic questions only):
+What is the capital of France?|London|Paris|Berlin|Madrid|Paris
+Which planet is closest to the Sun?|Mercury|Venus|Earth|Mars|Mercury`}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Use JSON format for rich questions with explanations. Simple format: Question|OptionA|OptionB|OptionC|OptionD|CorrectAnswer
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* True/False Content */}
+                {newAssignment.type === 'true-false' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Statements (one per line)
+                      </label>
+                      <textarea
+                        value={newAssignment.statements?.join('\n') || ''}
+                        onChange={(e) => setNewAssignment(prev => ({ 
+                          ...prev, 
+                          statements: e.target.value.split('\n').filter(stmt => stmt.trim())
+                        }))}
+                        rows={4}
+                        className="form-textarea w-full"
+                        placeholder="The Earth is round.&#10;The sun revolves around the Earth.&#10;Water boils at 100°C."
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Correct Answers (T/F for each statement)
+                      </label>
+                      <input
+                        type="text"
+                        value={newAssignment.answers?.join(',') || ''}
+                        onChange={(e) => setNewAssignment(prev => ({ 
+                          ...prev, 
+                          answers: e.target.value.split(',').map(ans => ans.trim().toUpperCase())
+                        }))}
+                        className="form-input w-full"
+                        placeholder="T,F,T (comma-separated, T for true, F for false)"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Matching Content */}
+                {newAssignment.type === 'matching' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Left Column Items (one per line)
+                      </label>
+                      <textarea
+                        value={newAssignment.leftItems?.join('\n') || ''}
+                        onChange={(e) => setNewAssignment(prev => ({ 
+                          ...prev, 
+                          leftItems: e.target.value.split('\n').filter(item => item.trim())
+                        }))}
+                        rows={4}
+                        className="form-textarea w-full"
+                        placeholder="Apple&#10;Banana&#10;Orange"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Right Column Items (one per line)
+                      </label>
+                      <textarea
+                        value={newAssignment.rightItems?.join('\n') || ''}
+                        onChange={(e) => setNewAssignment(prev => ({ 
+                          ...prev, 
+                          rightItems: e.target.value.split('\n').filter(item => item.trim())
+                        }))}
+                        rows={4}
+                        className="form-textarea w-full"
+                        placeholder="Red fruit&#10;Yellow fruit&#10;Orange fruit"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Drag and Drop Content */}
+                {newAssignment.type === 'drag-and-drop' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Drag & Drop Type
+                      </label>
+                      <select
+                        value={newAssignment.subtype || ''}
+                        onChange={(e) => setNewAssignment(prev => ({ ...prev, subtype: e.target.value }))}
+                        className="form-select w-full"
+                      >
+                        <option value="">Select a subtype</option>
+                        <option value="fill-blank">Fill in the Blank</option>
+                        <option value="image-caption">Image Caption Matching</option>
+                        <option value="ordering">Ordering</option>
+                      </select>
+                    </div>
+
+                    {newAssignment.subtype === 'fill-blank' && (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Sentence with Blanks
+                          </label>
+                          <textarea
+                            value={newAssignment.sentence || ''}
+                            onChange={(e) => setNewAssignment(prev => ({ ...prev, sentence: e.target.value }))}
+                            rows={3}
+                            className="form-textarea w-full"
+                            placeholder="The [BLANK] is [BLANK] today. (Use [BLANK] for blanks)"
+                          />
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Word Bank (one per line)
+                          </label>
+                          <textarea
+                            value={newAssignment.wordBank?.join('\n') || ''}
+                            onChange={(e) => setNewAssignment(prev => ({ 
+                              ...prev, 
+                              wordBank: e.target.value.split('\n').filter(word => word.trim())
+                            }))}
+                            rows={4}
+                            className="form-textarea w-full"
+                            placeholder="weather&#10;nice&#10;sunny&#10;cold"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {newAssignment.subtype === 'image-caption' && (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Images (Upload multiple images)
+                          </label>
+                          <input
+                            type="file"
+                            multiple
+                            accept="image/*"
+                            onChange={(e) => setNewAssignment(prev => ({ 
+                              ...prev, 
+                              images: Array.from(e.target.files || [])
+                            }))}
+                            className="form-input w-full"
+                          />
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Captions (one per line)
+                          </label>
+                          <textarea
+                            value={newAssignment.captions?.join('\n') || ''}
+                            onChange={(e) => setNewAssignment(prev => ({ 
+                              ...prev, 
+                              captions: e.target.value.split('\n').filter(caption => caption.trim())
+                            }))}
+                            rows={4}
+                            className="form-textarea w-full"
+                            placeholder="A cat&#10;A dog&#10;A bird"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {newAssignment.subtype === 'ordering' && (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Items to Order (one per line)
+                          </label>
+                          <textarea
+                            value={newAssignment.orderItems?.join('\n') || ''}
+                            onChange={(e) => setNewAssignment(prev => ({ 
+                              ...prev, 
+                              orderItems: e.target.value.split('\n').filter(item => item.trim())
+                            }))}
+                            rows={4}
+                            className="form-textarea w-full"
+                            placeholder="First step&#10;Second step&#10;Third step&#10;Fourth step"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Category
+                </label>
+                <input
+                  type="text"
+                  value={newAssignment.category}
+                  onChange={(e) => setNewAssignment(prev => ({ ...prev, category: e.target.value }))}
+                  className="form-input w-full"
+                  placeholder="e.g., Grammar, Listening, Speaking"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Quarter
+                </label>
+                <select
+                  value={newAssignment.quarter}
+                  onChange={(e) => setNewAssignment(prev => ({ ...prev, quarter: e.target.value }))}
+                  className="form-select w-full"
+                >
+                  <option value="Q1">Q1</option>
+                  <option value="Q2">Q2</option>
+                  <option value="Q3">Q3</option>
+                  <option value="Q4">Q4</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Max Attempts
+                </label>
+                <input
+                  type="number"
+                  value={newAssignment.maxAttempts}
+                  onChange={(e) => setNewAssignment(prev => ({ ...prev, maxAttempts: e.target.value }))}
+                  className="form-input w-full"
+                  placeholder="Leave empty for unlimited"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Course
+                </label>
+                <select
+                  value={newAssignment.courseId}
+                  onChange={(e) => setNewAssignment(prev => ({ ...prev, courseId: e.target.value }))}
+                  className="form-select w-full"
+                >
+                  <option value="">Select a course (optional)</option>
+                  {courses.map(course => (
+                    <option key={course.id} value={course.id}>
+                      {course.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Unit
+                </label>
+                <select
+                  value={newAssignment.unitId}
+                  onChange={(e) => setNewAssignment(prev => ({ ...prev, unitId: e.target.value }))}
+                  className="form-select w-full"
+                  disabled={!newAssignment.courseId}
+                >
+                  <option value="">Select a unit (optional)</option>
+                  {newAssignment.courseId && courses.find(c => c.id === newAssignment.courseId)?.units?.map((unit: any) => (
+                    <option key={unit.id} value={unit.id}>
+                      Unit {unit.order}: {unit.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Due Date
+                </label>
+                <input
+                  type="datetime-local"
+                  value={newAssignment.dueDate}
+                  onChange={(e) => setNewAssignment(prev => ({ ...prev, dueDate: e.target.value }))}
+                  className="form-input w-full"
+                />
+              </div>
+              <div className="flex items-center">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={newAssignment.published}
+                    onChange={(e) => setNewAssignment(prev => ({ ...prev, published: e.target.checked }))}
+                    className="form-checkbox mr-2"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Published</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Available From
+                </label>
+                <input
+                  type="datetime-local"
+                  value={newAssignment.availableFrom}
+                  onChange={(e) => setNewAssignment(prev => ({ ...prev, availableFrom: e.target.value }))}
+                  className="form-input w-full"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  When students can start this assignment (optional)
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Available To
+                </label>
+                <input
+                  type="datetime-local"
+                  value={newAssignment.availableTo}
+                  onChange={(e) => setNewAssignment(prev => ({ ...prev, availableTo: e.target.value }))}
+                  className="form-input w-full"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  When students can no longer access this assignment (optional)
+                </p>
+              </div>
+            </div>
+
+            {/* Grading Criteria - Only for manual grading assignments */}
+            {(newAssignment.type === 'writing' || newAssignment.type === 'writing-long' || newAssignment.type === 'speaking') && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Grading Criteria
+                </label>
+                <textarea
+                  value={newAssignment.criteria}
+                  onChange={(e) => setNewAssignment(prev => ({ ...prev, criteria: e.target.value }))}
+                  className="form-textarea w-full"
+                  rows={3}
+                  placeholder="Enter grading criteria or rubric..."
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Required for manual grading assignments (writing, speaking)
+                </p>
+              </div>
+            )}
+
+            <div className="flex space-x-2">
+              <button type="submit" className="btn-primary">
+                Create Assignment
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCreateAssignment(false)}
+                className="btn-secondary"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Edit Assignment Modal */}
+      {showEditAssignment && editingAssignment && (
+        <div className="card">
+          <h3 className="text-lg font-semibold mb-4">Edit Assignment</h3>
+          <form onSubmit={handleUpdateAssignment} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Title *
+                </label>
+                <input
+                  type="text"
+                  value={editingAssignment.title}
+                  onChange={(e) => setEditingAssignment(prev => ({ ...prev, title: e.target.value }))}
+                  className="form-input w-full"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Type
+                </label>
+                <input
+                  type="text"
+                  value={editingAssignment.type}
+                  className="form-input w-full"
+                  disabled
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Description
+              </label>
+              <textarea
+                value={editingAssignment.description || ''}
+                onChange={(e) => setEditingAssignment(prev => ({ ...prev, description: e.target.value }))}
+                className="form-textarea w-full"
+                rows={3}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Due Date
+                </label>
+                <input
+                  type="datetime-local"
+                  value={editingAssignment.dueDate || ''}
+                  onChange={(e) => setEditingAssignment(prev => ({ ...prev, dueDate: e.target.value }))}
+                  className="form-input w-full"
+                />
+              </div>
+              <div className="flex items-center">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={editingAssignment.published}
+                    onChange={(e) => setEditingAssignment(prev => ({ ...prev, published: e.target.checked }))}
+                    className="form-checkbox mr-2"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Published</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Available From
+                </label>
+                <input
+                  type="datetime-local"
+                  value={editingAssignment.availableFrom || ''}
+                  onChange={(e) => setEditingAssignment(prev => ({ ...prev, availableFrom: e.target.value }))}
+                  className="form-input w-full"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  When students can start this assignment (optional)
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Available To
+                </label>
+                <input
+                  type="datetime-local"
+                  value={editingAssignment.availableTo || ''}
+                  onChange={(e) => setEditingAssignment(prev => ({ ...prev, availableTo: e.target.value }))}
+                  className="form-input w-full"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  When students can no longer access this assignment (optional)
+                </p>
+              </div>
+            </div>
+
+            {/* Questions Section */}
+            <div className="border-t pt-4">
+              <h4 className="text-md font-semibold mb-3">📝 Assignment Questions</h4>
+              
+              {/* Assignment Type Info */}
+              <div className="mb-4 p-2 bg-blue-50 rounded text-sm">
+                <p><strong>Assignment Type:</strong> {editingAssignment.questions?.type || 'Unknown'}</p>
+                {editingAssignment.questions?.questions && (
+                  <p><strong>Questions:</strong> {editingAssignment.questions.questions.length} multiple choice questions</p>
+                )}
+              </div>
+              
+              {editingAssignment.questions ? (
+                <div className="space-y-4">
+                  {/* Handle bulk multiple choice questions */}
+                  {editingAssignment.questions.type === 'bulk-multiple-choice' && editingAssignment.questions.questions ? (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <h5 className="font-medium text-lg">Bulk Multiple Choice Questions</h5>
+                        <span className="text-sm text-blue-600">
+                          {editingAssignment.questions.questions.length} questions
+                        </span>
+                      </div>
+                      
+                      {editingAssignment.questions.questions.map((question: any, index: number) => (
+                        <div key={index} className="border border-gray-200 rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <h6 className="font-medium">Question {index + 1}</h6>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updatedQuestions = [...editingAssignment.questions.questions];
+                                updatedQuestions.splice(index, 1);
+                                setEditingAssignment(prev => ({
+                                  ...prev,
+                                  questions: {
+                                    ...prev.questions,
+                                    questions: updatedQuestions
+                                  }
+                                }));
+                              }}
+                              className="text-red-600 hover:text-red-800 text-sm"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                          
+                          <div className="space-y-3">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Question Text
+                              </label>
+                              <textarea
+                                value={question.question || ''}
+                                onChange={(e) => {
+                                  const updatedQuestions = [...editingAssignment.questions.questions];
+                                  updatedQuestions[index] = {
+                                    ...question,
+                                    question: e.target.value
+                                  };
+                                  setEditingAssignment(prev => ({
+                                    ...prev,
+                                    questions: {
+                                      ...prev.questions,
+                                      questions: updatedQuestions
+                                    }
+                                  }));
+                                }}
+                                className="form-textarea w-full"
+                                rows={2}
+                              />
+                            </div>
+                            
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Options
+                              </label>
+                              <div className="space-y-2">
+                                {question.options.map((option: string, optionIndex: number) => (
+                                  <div key={optionIndex} className="flex items-center space-x-2">
+                                    <input
+                                      type="radio"
+                                      name={`correct-${index}`}
+                                      checked={question.correctAnswer === option}
+                                      onChange={() => {
+                                        const updatedQuestions = [...editingAssignment.questions.questions];
+                                        updatedQuestions[index] = {
+                                          ...question,
+                                          correctAnswer: option
+                                        };
+                                        setEditingAssignment(prev => ({
+                                          ...prev,
+                                          questions: {
+                                            ...prev.questions,
+                                            questions: updatedQuestions
+                                          }
+                                        }));
+                                      }}
+                                      className="form-radio"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={option}
+                                      onChange={(e) => {
+                                        const updatedQuestions = [...editingAssignment.questions.questions];
+                                        const updatedOptions = [...question.options];
+                                        updatedOptions[optionIndex] = e.target.value;
+                                        updatedQuestions[index] = {
+                                          ...question,
+                                          options: updatedOptions,
+                                          correctAnswer: question.correctAnswer === question.options[optionIndex] ? e.target.value : question.correctAnswer
+                                        };
+                                        setEditingAssignment(prev => ({
+                                          ...prev,
+                                          questions: {
+                                            ...prev.questions,
+                                            questions: updatedQuestions
+                                          }
+                                        }));
+                                      }}
+                                      className="form-input flex-1"
+                                      placeholder={`Option ${optionIndex + 1}`}
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Explanation
+                              </label>
+                              <textarea
+                                value={question.explanation || ''}
+                                onChange={(e) => {
+                                  const updatedQuestions = [...editingAssignment.questions.questions];
+                                  updatedQuestions[index] = {
+                                    ...question,
+                                    explanation: e.target.value
+                                  };
+                                  setEditingAssignment(prev => ({
+                                    ...prev,
+                                    questions: {
+                                      ...prev.questions,
+                                      questions: updatedQuestions
+                                    }
+                                  }));
+                                }}
+                                className="form-textarea w-full"
+                                rows={2}
+                                placeholder="Explanation for the correct answer..."
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newQuestion = {
+                            question: '',
+                            options: ['', '', '', ''],
+                            correctAnswer: '',
+                            explanation: '',
+                            incorrectExplanations: {}
+                          };
+                          const updatedQuestions = [...editingAssignment.questions.questions, newQuestion];
+                          setEditingAssignment(prev => ({
+                            ...prev,
+                            questions: {
+                              ...prev.questions,
+                              questions: updatedQuestions
+                            }
+                          }));
+                        }}
+                        className="w-full px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-gray-400 hover:text-gray-800 transition-colors"
+                      >
+                        + Add Question
+                      </button>
+                    </div>
+                  ) : Array.isArray(editingAssignment.questions) ? (
+                    // Handle array of questions
+                    editingAssignment.questions.map((question: any, index: number) => (
+                      <div key={index} className="border border-gray-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <h5 className="font-medium">Question {index + 1}</h5>
+                          <span className="text-sm text-gray-500">
+                            {question.points || 1} point{question.points !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Question Text
+                            </label>
+                            <textarea
+                              value={question.text || question.question || ''}
+                              onChange={(e) => {
+                                const updatedQuestions = [...editingAssignment.questions];
+                                updatedQuestions[index] = {
+                                  ...question,
+                                  text: e.target.value,
+                                  question: e.target.value
+                                };
+                                setEditingAssignment(prev => ({
+                                  ...prev,
+                                  questions: updatedQuestions
+                                }));
+                              }}
+                              className="form-textarea w-full"
+                              rows={2}
+                            />
+                          </div>
+                          
+                          {question.options && Array.isArray(question.options) && (
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Options
+                              </label>
+                              <div className="space-y-2">
+                                {question.options.map((option: string, optionIndex: number) => (
+                                  <div key={optionIndex} className="flex items-center space-x-2">
+                                    <input
+                                      type="text"
+                                      value={option}
+                                      onChange={(e) => {
+                                        const updatedQuestions = [...editingAssignment.questions];
+                                        const updatedOptions = [...question.options];
+                                        updatedOptions[optionIndex] = e.target.value;
+                                        updatedQuestions[index] = {
+                                          ...question,
+                                          options: updatedOptions
+                                        };
+                                        setEditingAssignment(prev => ({
+                                          ...prev,
+                                          questions: updatedQuestions
+                                        }));
+                                      }}
+                                      className="form-input flex-1"
+                                      placeholder={`Option ${optionIndex + 1}`}
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const updatedQuestions = [...editingAssignment.questions];
+                                        const updatedOptions = question.options.filter((_: any, i: number) => i !== optionIndex);
+                                        updatedQuestions[index] = {
+                                          ...question,
+                                          options: updatedOptions
+                                        };
+                                        setEditingAssignment(prev => ({
+                                          ...prev,
+                                          questions: updatedQuestions
+                                        }));
+                                      }}
+                                      className="px-2 py-1 text-red-600 hover:text-red-800"
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                ))}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const updatedQuestions = [...editingAssignment.questions];
+                                    const updatedOptions = [...question.options, ''];
+                                    updatedQuestions[index] = {
+                                      ...question,
+                                      options: updatedOptions
+                                    };
+                                    setEditingAssignment(prev => ({
+                                      ...prev,
+                                      questions: updatedQuestions
+                                    }));
+                                  }}
+                                  className="text-sm text-blue-600 hover:text-blue-800"
+                                >
+                                  + Add Option
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                          
+                          {question.correctAnswer && (
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Correct Answer
+                              </label>
+                              <input
+                                type="text"
+                                value={question.correctAnswer}
+                                onChange={(e) => {
+                                  const updatedQuestions = [...editingAssignment.questions];
+                                  updatedQuestions[index] = {
+                                    ...question,
+                                    correctAnswer: e.target.value
+                                  };
+                                  setEditingAssignment(prev => ({
+                                    ...prev,
+                                    questions: updatedQuestions
+                                  }));
+                                }}
+                                className="form-input w-full"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    // Handle single question object
+                    <div className="border border-gray-200 rounded-lg p-4">
+                      <h5 className="font-medium mb-3">Question</h5>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Question Text
+                          </label>
+                          <textarea
+                            value={editingAssignment.questions.text || editingAssignment.questions.question || ''}
+                            onChange={(e) => {
+                              setEditingAssignment(prev => ({
+                                ...prev,
+                                questions: {
+                                  ...prev.questions,
+                                  text: e.target.value,
+                                  question: e.target.value
+                                }
+                              }));
+                            }}
+                            className="form-textarea w-full"
+                            rows={3}
+                          />
+                        </div>
+                        
+                        {editingAssignment.questions.options && Array.isArray(editingAssignment.questions.options) && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Options
+                            </label>
+                            <div className="space-y-2">
+                              {editingAssignment.questions.options.map((option: string, index: number) => (
+                                <div key={index} className="flex items-center space-x-2">
+                                  <input
+                                    type="text"
+                                    value={option}
+                                    onChange={(e) => {
+                                      const updatedOptions = [...editingAssignment.questions.options];
+                                      updatedOptions[index] = e.target.value;
+                                      setEditingAssignment(prev => ({
+                                        ...prev,
+                                        questions: {
+                                          ...prev.questions,
+                                          options: updatedOptions
+                                        }
+                                      }));
+                                    }}
+                                    className="form-input flex-1"
+                                    placeholder={`Option ${index + 1}`}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Fallback to legacy question fields */}
+                  <div className="border border-gray-200 rounded-lg p-4">
+                    <h5 className="font-medium mb-3">Legacy Question Fields</h5>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Question Text
+                        </label>
+                        <textarea
+                          value={editingAssignment.question || ''}
+                          onChange={(e) => {
+                            setEditingAssignment(prev => ({
+                              ...prev,
+                              question: e.target.value
+                            }));
+                          }}
+                          className="form-textarea w-full"
+                          rows={3}
+                          placeholder="Enter the question text..."
+                        />
+                      </div>
+                      
+                      {editingAssignment.options && Array.isArray(editingAssignment.options) && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Options
+                          </label>
+                          <div className="space-y-2">
+                            {editingAssignment.options.map((option: string, index: number) => (
+                              <div key={index} className="flex items-center space-x-2">
+                                <input
+                                  type="text"
+                                  value={option}
+                                  onChange={(e) => {
+                                    const updatedOptions = [...editingAssignment.options];
+                                    updatedOptions[index] = e.target.value;
+                                    setEditingAssignment(prev => ({
+                                      ...prev,
+                                      options: updatedOptions
+                                    }));
+                                  }}
+                                  className="form-input flex-1"
+                                  placeholder={`Option ${index + 1}`}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Correct Answer
+                        </label>
+                        <input
+                          type="text"
+                          value={editingAssignment.correctAnswer || ''}
+                          onChange={(e) => {
+                            setEditingAssignment(prev => ({
+                              ...prev,
+                              correctAnswer: e.target.value
+                            }));
+                          }}
+                          className="form-input w-full"
+                          placeholder="Enter the correct answer..."
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="text-center py-4 text-gray-500">
+                    <p>No structured questions found for this assignment.</p>
+                    <p className="text-sm mt-1">Using legacy question fields. Consider updating to the new format.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex space-x-2">
+              <button type="submit" className="btn-primary">
+                Update Assignment
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEditAssignment(false);
+                  setEditingAssignment(null);
+                }}
+                className="btn-secondary"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Assignments List */}
+      <div className="space-y-4">
+        {assignments.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-gray-500">No assignments created yet.</p>
+          </div>
+        ) : (
+          <>
+            {/* Pagination Info */}
+            <div className="flex justify-between items-center text-sm text-gray-600">
+              <span>
+                Showing {((currentPage - 1) * assignmentsPerPage) + 1} to {Math.min(currentPage * assignmentsPerPage, assignments.length)} of {assignments.length} assignments
+              </span>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                <span className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded">
+                  Page {currentPage} of {Math.ceil(assignments.length / assignmentsPerPage)}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(Math.ceil(assignments.length / assignmentsPerPage), prev + 1))}
+                  disabled={currentPage >= Math.ceil(assignments.length / assignmentsPerPage)}
+                  className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+
+            {/* Assignments Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
+              {assignments
+                .slice((currentPage - 1) * assignmentsPerPage, currentPage * assignmentsPerPage)
+                .map((assignment) => (
+              <div key={assignment.id} className="card">
+              <div className="flex justify-between items-start">
+                <div className="flex-1">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <h3 className="text-lg font-semibold">{assignment.title}</h3>
+                    <span className={`px-2 py-1 text-xs rounded-full ${
+                      assignment.published 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {assignment.published ? 'Published' : 'Draft'}
+                    </span>
+                    <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full">
+                      {assignment.type}
+                    </span>
+                  </div>
+                  
+                  {assignment.description && (
+                    <p className="text-gray-600 mb-2">{assignment.description}</p>
+                  )}
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-500">
+                    {assignment.course && (
+                      <div>
+                        <span className="font-medium">Course:</span> {assignment.course.name}
+                      </div>
+                    )}
+                    {assignment.unit && (
+                      <div>
+                        <span className="font-medium">Unit:</span> Unit {assignment.unit.order}: {assignment.unit.name}
+                      </div>
+                    )}
+                    {assignment.category && (
+                      <div>
+                        <span className="font-medium">Category:</span> {assignment.category}
+                      </div>
+                    )}
+                    <div>
+                      <span className="font-medium">Quarter:</span> {assignment.quarter}
+                    </div>
+                  </div>
+                  
+                  {assignment.dueDate && (
+                    <div className="mt-2 text-sm text-gray-500">
+                      <span className="font-medium">Due:</span> {new Date(assignment.dueDate).toLocaleDateString()}
+                    </div>
+                  )}
+                  
+                  {/* Availability Status */}
+                  <div className="mt-2 text-sm text-gray-500">
+                    <span className="font-medium">Availability:</span> 
+                    {!assignment.availableFrom && !assignment.availableTo ? (
+                      <span className="text-green-600"> Always available</span>
+                    ) : (
+                      <span>
+                        {assignment.availableFrom && (
+                          <span> From {new Date(assignment.availableFrom).toLocaleDateString()}</span>
+                        )}
+                        {assignment.availableTo && (
+                          <span> To {new Date(assignment.availableTo).toLocaleDateString()}</span>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div className="mt-2 text-sm text-gray-500">
+                    <span className="font-medium">Submissions:</span> {assignment.submissions?.length || 0}
+                  </div>
+                  
+                  {/* Resources Summary */}
+                  <div className="mt-2 text-sm text-gray-500">
+                    <span className="font-medium">Resources:</span> {assignment.resources?.length || 0} attached
+                    {assignment.resources && assignment.resources.length > 0 && (
+                      <button
+                        onClick={() => handleViewAssignmentResources(assignment)}
+                        className="ml-2 text-blue-600 hover:text-blue-800 text-xs underline"
+                      >
+                        View Details
+                      </button>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => handleDeleteAssignment(assignment.id)}
+                    className="text-red-600 hover:text-red-800 text-sm font-medium"
+                  >
+                    Delete
+                  </button>
+                  <button
+                    onClick={() => {
+                  console.log('🎯 Edit Assignment button clicked');
+                  console.log('📝 Assignment to edit:', assignment);
+                  handleEditAssignment(assignment);
+                }}
+                    className="text-yellow-600 hover:text-yellow-800 text-sm font-medium"
+                  >
+                    Edit
+                  </button>
+                </div>
+              </div>
+            </div>
+            </div>
+            </div>
+            </div>
+          ))}
+          </>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderClassView = () => (
+    <div className="space-y-6">
+      <div className="card">
+        <h2 className="text-xl font-semibold mb-4">Class Management & Year Level Progression</h2>
+        <p className="text-gray-600 mb-4">
+          Manage classrooms and progress entire classes to the next year level at the end of the academic year.
+        </p>
+        
+        <div className="space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h3 className="font-medium text-blue-900 mb-2">Year Level Progression</h3>
+            <p className="text-sm text-blue-700">
+              Use this feature to move entire classes to the next year level. For example, move all P1/1 students to P2/1.
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="border rounded-lg p-4">
+              <h3 className="font-medium mb-2">Current Class Structure</h3>
+              <p className="text-sm text-gray-600">
+                Students are organized by year level (P1-P6, M1-M6) and class number (1-6).
+              </p>
+              <p className="text-sm text-gray-600 mt-2">
+                Example: P1/1, P1/2, M1/1, M1/2, etc.
+              </p>
+            </div>
+            
+            <div className="border rounded-lg p-4">
+              <h3 className="font-medium mb-2">Course Assignment</h3>
+              <p className="text-sm text-gray-600">
+                Courses are named after textbooks (e.g., "Project Explore 2") and can be assigned to multiple classrooms.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Assignment Resources Modal */}
+      {showAssignmentResourcesModal && selectedAssignmentForResources && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
+          <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-800">
+                📁 Resources for "{selectedAssignmentForResources.title}"
+              </h2>
+              <button
+                onClick={() => setShowAssignmentResourcesModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <span className="text-2xl">×</span>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Assignment Info */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h3 className="font-semibold text-blue-900 mb-2">Assignment Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                  <div><span className="font-medium">Type:</span> {selectedAssignmentForResources.type}</div>
+                  <div><span className="font-medium">Course:</span> {selectedAssignmentForResources.course?.name || 'N/A'}</div>
+                  {selectedAssignmentForResources.unit && (
+                    <div><span className="font-medium">Unit:</span> {selectedAssignmentForResources.unit.name}</div>
+                  )}
+                  {selectedAssignmentForResources.dueDate && (
+                    <div><span className="font-medium">Due Date:</span> {new Date(selectedAssignmentForResources.dueDate).toLocaleDateString()}</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Resources List */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <h3 className="font-semibold text-gray-900 mb-4">📚 Attached Resources</h3>
+                
+                {selectedAssignmentForResources.resources && selectedAssignmentForResources.resources.length > 0 ? (
+                  <div className="space-y-3">
+                    {selectedAssignmentForResources.resources.map((resource: any) => (
+                      <div key={resource.id} className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
+                        <div className="flex items-center space-x-3">
+                          <span className="text-xl">{getFileIcon(resource.type)}</span>
+                          <div>
+                            <div className="font-medium text-gray-900">{resource.title}</div>
+                            {resource.description && (
+                              <div className="text-sm text-gray-600">{resource.description}</div>
+                            )}
+                            <div className="text-xs text-gray-500">
+                              {formatFileSize(resource.fileSize || 0)} • {resource.type} • 
+                              Uploaded {new Date(resource.createdAt).toLocaleDateString()}
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            handleRemoveResourceFromAssignment(selectedAssignmentForResources.id, resource.id);
+                            setShowAssignmentResourcesModal(false);
+                          }}
+                          className="text-red-600 hover:text-red-800 text-sm font-medium"
+                          title="Remove resource"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <span className="text-4xl">📚</span>
+                    <p className="mt-2 text-gray-600">No resources attached to this assignment yet.</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Use the "Allocate Resources" tab to add resources to this assignment.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderProgressTracking = () => (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold">📈 Progress Tracking</h2>
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        <h3 className="font-semibold text-blue-900 mb-2">🎯 Progress Tracking System</h3>
+        <p className="text-blue-800 text-sm mb-3">
+          This system tracks daily student performance, learning patterns, and progress trends for detailed reporting and analysis.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+          <div>
+            <span className="font-medium">📊 Daily Progress:</span> Track scores and time spent
+          </div>
+          <div>
+            <span className="font-medium">📈 Weekly Trends:</span> Identify best/worst performance days
+          </div>
+          <div>
+            <span className="font-medium">🧠 Learning Patterns:</span> Analyze improvement rates and consistency
+          </div>
+        </div>
+      </div>
+      
+      <ProgressDashboard isTeacher={true} />
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+      <div className="bg-white shadow-sm border-b">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center h-16">
+            <h1 className="text-xl font-semibold text-gray-900">Teacher Portal</h1>
+              <button
+                onClick={handleLogout}
+              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex">
+          {/* Sidebar */}
+          <div className="w-64 mr-8">
+            <nav className="space-y-2">
+              {sidebarMenu.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id)}
+                  className={`w-full text-left px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    activeTab === item.id
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  <span className="mr-2">{item.icon}</span>
+                  {item.label}
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          {/* Main Content */}
+          <div className="flex-1">
+                      {activeTab === 'dashboard' && renderDashboard()}
+            {activeTab === 'course-structure' && renderCourseStructure()}
+            {activeTab === 'assignments' && renderAssignments()}
+            {activeTab === 'assessment-creator' && renderAssessmentCreator()}
+            {activeTab === 'resources' && renderResources()}
+            {activeTab === 'students' && renderStudents()}
+            {activeTab === 'class-view' && renderClassView()}
+            {activeTab === 'progress' && renderProgressTracking()}
+        </div>
+      </div>
+      </div>
+    </div>
+  );
+};
+
+export default Teacher; 

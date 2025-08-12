@@ -94,7 +94,7 @@ router.get('/:classroomId/students', auth, requireRole(['ADMIN', 'TEACHER']), as
 router.post('/:classroomId/progress', [
   auth,
   requireRole(['ADMIN', 'TEACHER']),
-  body('newYearLevel').isIn(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6']).withMessage('Valid year level is required'),
+  body('newYearLevel').isIn(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'ADULT', 'ADVANCED', 'IN_HOUSE']).withMessage('Valid year level is required'),
   body('newClassNum').optional().isIn(['1', '2', '3', '4', '5', '6'])
 ], async (req, res) => {
   try {

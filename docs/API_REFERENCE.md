@@ -216,6 +216,27 @@ Create a new unit (teachers only).
 ---
 
 ## Resource Management
+### GET /resources/clone/organizations (admin only)
+Returns organizations with subjects/courses/units available for cloning targets.
+
+### GET /resources/clone/resources (admin only)
+Returns resources with subject/course/unit info and assignment counts for cloning.
+
+### POST /resources/clone (admin only)
+Clone a resource (and optionally assignments) to another organization/subject/course/unit.
+
+Request Body:
+```json
+{
+  "sourceResourceId": "uuid",
+  "targetOrganizationId": "uuid",
+  "targetSubjectId": "uuid",
+  "targetCourseId": "uuid or null",
+  "targetUnitId": "uuid or null",
+  "includeAssignments": true
+}
+```
+
 
 ### GET /resources
 Get all resources for the teacher's school.
@@ -268,10 +289,12 @@ title: "Math Lecture"
 description: "Introduction to algebra"
 courseId: "course-uuid" (optional)
 unitId: "unit-uuid" (optional)
-tags: ["algebra", "basics"] (optional)
+tags: ["algebra", "basics"] (optional JSON string)
 isPublic: true (optional)
 isShared: false (optional)
 ```
+
+Files are stored under `/uploads/resources/<organizationId>/<year>/...`.
 
 ### GET /resources/shared
 Get all shared resource templates.

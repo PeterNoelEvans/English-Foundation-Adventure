@@ -14,9 +14,12 @@ router.post(
   requireRole(['TEACHER']),
   [
     body('title').notEmpty().withMessage('Unit title is required'),
-    body('number').isInt({ min: 1 }).withMessage('Unit number must be a positive integer'),
+    // Make number optional; when omitted or colliding, we will auto-advance to next available
+    body('number').optional().isInt({ min: 1 }).withMessage('Unit number must be a positive integer'),
     body('description').optional(),
-    body('courseId').optional()
+    body('courseId').optional(),
+    // Accept boolean or truthy string/number; validation handled in code
+    body('bump').optional()
   ],
   async (req, res) => {
     try {
@@ -25,7 +28,8 @@ router.post(
         return res.status(400).json({ errors: errors.array() });
       }
       
-      const { title, number, description, courseId } = req.body;
+      const { title, number, description, courseId, bump } = req.body;
+      const bumpFlag = bump === true || bump === 'true' || bump === 1 || bump === '1';
       
       // If courseId is provided, verify it exists and belongs to the teacher's organization
       if (courseId) {
@@ -43,48 +47,71 @@ router.post(
         }
       }
       
-      // Check for duplicate unit number in the same course (if courseId provided)
-      if (courseId) {
-        const existingUnit = await prisma.unit.findFirst({
-          where: {
-            courseId,
-            order: number
-          }
-        });
-        
-        if (existingUnit) {
-          return res.status(400).json({ message: `Unit number ${number} already exists in this course` });
-        }
-      }
-      
-      const unit = await prisma.unit.create({
-        data: {
-          name: title,
-          description: description || '',
-          order: number,
-          courseId: courseId || null
-        },
-        include: {
-          course: {
-            select: {
-              id: true,
-              name: true,
-              yearLevel: true,
-              subject: {
+      // Determine the final order number to use and handle optional bumping
+      let unit;
+      const parsedNumber = typeof number === 'number' ? number : parseInt(number, 10);
+
+      if (courseId && bumpFlag && parsedNumber && parsedNumber >= 1) {
+        // Insert at a specific position and bump subsequent units (atomic)
+        unit = await prisma.$transaction(async (tx) => {
+          await tx.unit.updateMany({
+            where: { courseId, order: { gte: parsedNumber } },
+            data: { order: { increment: 1 } }
+          });
+          return tx.unit.create({
+            data: {
+              name: title,
+              description: description || '',
+              order: parsedNumber,
+              courseId
+            },
+            include: {
+              course: {
                 select: {
                   id: true,
-                  name: true
+                  name: true,
+                  subject: { select: { id: true, name: true } }
                 }
-              }
+              },
+              parts: { include: { sections: true } }
             }
-          },
-          parts: {
-            include: {
-              sections: true
-            }
+          });
+        });
+      } else {
+        // Auto-advance behavior (or explicit non-colliding number)
+        let finalOrder;
+        if (courseId) {
+          const maxOrder = await prisma.unit.aggregate({ _max: { order: true }, where: { courseId } });
+          const nextOrder = (maxOrder._max.order || 0) + 1;
+          if (!parsedNumber || parsedNumber < 1) {
+            finalOrder = nextOrder;
+          } else {
+            const existingUnitAtNumber = await prisma.unit.findFirst({ where: { courseId, order: parsedNumber } });
+            finalOrder = existingUnitAtNumber ? nextOrder : parsedNumber;
           }
+        } else {
+          finalOrder = (!parsedNumber || parsedNumber < 1) ? 1 : parsedNumber;
         }
-      });
+
+        unit = await prisma.unit.create({
+          data: {
+            name: title,
+            description: description || '',
+            order: finalOrder,
+            courseId: courseId || null
+          },
+          include: {
+            course: {
+              select: {
+                id: true,
+                name: true,
+                subject: { select: { id: true, name: true } }
+              }
+            },
+            parts: { include: { sections: true } }
+          }
+        });
+      }
       
       // Transform unit to match frontend expectations
       const transformedUnit = {
@@ -117,7 +144,6 @@ router.get('/', auth, requireRole(['TEACHER']), async (req, res) => {
           select: {
             id: true,
             name: true,
-            yearLevel: true,
             subject: {
               select: {
                 id: true,
@@ -134,7 +160,6 @@ router.get('/', auth, requireRole(['TEACHER']), async (req, res) => {
       },
       orderBy: [
         { course: { subject: { name: 'asc' } } },
-        { course: { yearLevel: 'asc' } },
         { order: 'asc' }
       ]
     });
@@ -390,7 +415,8 @@ router.patch(
     body('title').optional().notEmpty().withMessage('Unit title cannot be empty'),
     body('number').optional().isInt({ min: 1 }).withMessage('Unit number must be a positive integer'),
     body('description').optional(),
-    body('courseId').optional()
+    body('courseId').optional(),
+    body('bump').optional()
   ],
   async (req, res) => {
     try {
@@ -400,7 +426,8 @@ router.patch(
       }
       
       const { id } = req.params;
-      const { title, number, description, courseId } = req.body;
+      const { title, number, description, courseId, bump } = req.body;
+      const bumpFlag = bump === true || bump === 'true' || bump === 1 || bump === '1';
       
       // Check if unit exists and belongs to teacher's organization
       const existingUnit = await prisma.unit.findFirst({
@@ -448,24 +475,80 @@ router.patch(
         }
       }
       
-      // Check for duplicate unit number if number is being changed
-      if (number && number !== existingUnit.order) {
+      const parsedNumber = typeof number === 'number' ? number : (number ? parseInt(number, 10) : undefined);
+
+      if ((bump === true || bump === 'true' || bump === 1 || bump === '1') && parsedNumber && parsedNumber >= 1 && (!courseId || courseId === existingUnit.courseId)) {
+        // In-course reordering with bump semantics
+        await prisma.$transaction(async (tx) => {
+          const oldN = existingUnit.order;
+          const newN = parsedNumber;
+          const courseKey = existingUnit.courseId;
+
+          if (newN === oldN) {
+            // Only update non-order fields
+            await tx.unit.update({
+              where: { id },
+              data: {
+                name: title ?? existingUnit.name,
+                description: (description !== undefined ? description : existingUnit.description)
+              }
+            });
+            return;
+          }
+
+          if (newN < oldN) {
+            // Move up: shift [newN, oldN-1] up by +1
+            await tx.unit.updateMany({
+              where: { courseId: courseKey, order: { gte: newN, lte: oldN - 1 } },
+              data: { order: { increment: 1 } }
+            });
+          } else {
+            // Move down: shift [oldN+1, newN] down by -1
+            await tx.unit.updateMany({
+              where: { courseId: courseKey, order: { gte: oldN + 1, lte: newN } },
+              data: { order: { decrement: 1 } }
+            });
+          }
+
+          await tx.unit.update({
+            where: { id },
+            data: {
+              name: title ?? existingUnit.name,
+              description: (description !== undefined ? description : existingUnit.description),
+              order: newN
+            }
+          });
+        });
+
+        const updatedUnit = await prisma.unit.findUnique({
+          where: { id },
+          include: {
+            course: { select: { id: true, name: true, subject: { select: { id: true, name: true } } } },
+            parts: { include: { sections: true } }
+          }
+        });
+
+        const transformedUnit = { ...updatedUnit, title: updatedUnit.name, number: updatedUnit.order };
+        return res.json({ message: 'Unit updated successfully', unit: transformedUnit });
+      }
+
+      // Original duplicate protection when not bumping
+      if (parsedNumber && parsedNumber !== existingUnit.order) {
         const duplicateUnit = await prisma.unit.findFirst({
           where: {
             courseId: courseId || existingUnit.courseId,
-            order: number,
+            order: parsedNumber,
             id: { not: id }
           }
         });
-        
         if (duplicateUnit) {
-          return res.status(400).json({ message: `Unit number ${number} already exists in this course` });
+          return res.status(400).json({ message: `Unit number ${parsedNumber} already exists in this course` });
         }
       }
       
       const updateData = {};
       if (title) updateData.name = title;
-      if (number) updateData.order = number;
+      if (parsedNumber) updateData.order = parsedNumber;
       if (description !== undefined) updateData.description = description;
       if (courseId) updateData.courseId = courseId;
       

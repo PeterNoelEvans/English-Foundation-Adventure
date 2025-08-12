@@ -145,52 +145,93 @@ model Unit {
 
 ## Content Management
 
-### Assignment
-Represents assignments that students can complete.
+### Assessment
+Represents assessments that students can complete.
 
 ```sql
-model Assignment {
-  id            String   @id @default(uuid())
-  title         String
-  description   String?
-  type          String   // ASSIGNMENT, QUIZ, TEST
-  unit          Unit     @relation(fields: [unitId], references: [id])
-  unitId        String
-  school        School   @relation(fields: [schoolId], references: [id])
-  schoolId      String
-  createdBy     User     @relation(fields: [createdById], references: [id])
-  createdById   String
-  isActive      Boolean  @default(true)
-  timeLimit     Int?     // in minutes
-  totalPoints   Int      @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+model Assessment {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  type        String   // Assessment type: 'multiple-choice', 'true-false', 'matching', 'drag-and-drop', 'writing', 'writing-long', 'speaking', 'assignment', 'listening'
+  subtype     String?  // For drag-and-drop: 'ordering', 'categorization', 'fill-blank', 'labeling', 'image-caption'
+  category    String?  // e.g., 'Grammar', 'Listening', 'Speaking', 'Vocabulary', etc.
+  difficulty  String?  // 'beginner', 'intermediate', 'advanced'
+  timeLimit   Int?     // Time limit in minutes (null = no limit)
+  points      Int      @default(1) // Points per question or total points
+  
+  // Content and questions
+  questions   Json?    // Question data structure varies by type
+  instructions String? // Specific instructions for the assessment
+  
+  // Grading and feedback
+  criteria    String?  // Grading criteria/rubric for manually graded assessments
+  autoGrade   Boolean  @default(true) // Whether assessment can be auto-graded
+  showFeedback Boolean @default(true) // Whether to show feedback after submission
+  
+  // Scheduling
+  dueDate     DateTime? // For assignments
+  availableFrom DateTime? // When assessment becomes available
+  availableTo   DateTime? // When assessment becomes unavailable
+  quarter     String   @default("Q1") // "Q1", "Q2", "Q3", "Q4"
+  
+  // Settings
+  published   Boolean  @default(true)
+  maxAttempts Int?     // Maximum allowed attempts (null = unlimited)
+  shuffleQuestions Boolean @default(false) // Whether to shuffle question order
+  allowReview Boolean  @default(true) // Whether students can review after submission
+  
+  // Metadata
+  tags        String[] // Array of tags for categorization
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  // Relations
-  questions     Question[]
-  studentActivities StudentActivity[] @relation("AssignmentActivities")
-  assignmentAttempts AssignmentAttempt[] @relation("AssignmentAttempts")
+  // Relationships
+  createdById String
+  createdBy   User @relation("AssessmentCreator", fields: [createdById], references: [id])
+  
+  // Assignment relationships (nullable for assessment bank/drafts)
+  courseId    String?
+  course      Course? @relation(fields: [courseId], references: [id])
+  unitId      String?
+  unit        Unit? @relation(fields: [unitId], references: [id])
+  partId      String?
+  part        Part? @relation(fields: [partId], references: [id])
+  sectionId   String?
+  section     Section? @relation(fields: [sectionId], references: [id])
+  topicId     String?
+  topic       Topic? @relation(fields: [topicId], references: [id])
+  
+  // Resources and media
+  resources   Resource[]
+  mediaFiles  MediaFile[]
+  
+  // Submissions
+  submissions AssessmentSubmission[]
+
+  @@map("assessments")
 }
 ```
 
-### Question
-Represents individual questions within assignments.
+### MediaFile
+Represents media files associated with assessments.
 
 ```sql
-model Question {
-  id            String   @id @default(uuid())
-  content       String
-  type          String   // multiple_choice, true_false, fill_in_blank, etc.
-  options       Json?    // Question options/choices
-  answer        Json?    // Correct answer(s)
-  points        Int      @default(1)
-  assignment    Assignment @relation(fields: [assignmentId], references: [id])
-  assignmentId  String
-  order         Int      @default(0)
-  scoring       Json?    // Scoring configuration
-  feedback      Json?    // Feedback configuration
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+model MediaFile {
+  id            String     @id @default(uuid())
+  type          String     // 'audio', 'video', 'image'
+  url           String?    // For external media
+  filePath      String?    // For uploaded files
+  duration      Int?       // For audio/video duration in seconds
+  label         String?    // Original field name or label for robust linking
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  // Relationships
+  assessmentId  String
+  assessment    Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  @@map("media_files")
 }
 ```
 

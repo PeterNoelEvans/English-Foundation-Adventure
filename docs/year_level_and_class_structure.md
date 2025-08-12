@@ -14,7 +14,7 @@ The English Foundation Adventure LMS has been updated to properly separate year 
 - Confusion between academic levels and curriculum content
 
 **After (Correct):**
-- **Year Levels**: P1, P2, P3, P4, P5, P6, M1, M2, M3, M4, M5, M6
+- **Year Levels**: P1, P2, P3, P4, P5, P6, M1, M2, M3, M4, M5, M6, ADULT, ADVANCED, IN_HOUSE
 - **Classes**: P1/1, P1/2, P1/3, etc. (up to 6 classes per year level)
 - **Courses**: Named after textbooks (e.g., "Project Explore 2", "Let's Find Out")
 

@@ -1,3 +1,23 @@
+## Teacher Portal Enhancements
+
+- [ ] Append files to existing resource groups from UI (add label field to upload; "Append files" action on groups)
+- [ ] Resource preview modal with markdown rendering and code syntax highlighting (HTML/CSS/JS/JSON)
+- [ ] Resource edit modal: tags editing and move resource between course/unit
+- [ ] Combine Update Student and Update Class into single Save option (optional)
+- [ ] Dedicated Resources tab for read-only browsing (search, filter, download)
+
+## Backend Enhancements
+
+- [x] Support text/markdown/code MIME types for resources; classify as MARKDOWN/CODE
+- [x] Label-based grouping for resources to allow appending later
+- [ ] Endpoint to append files to an existing labeled group
+- [ ] Optional: store group as first-class entity for robust grouping and ordering
+
+## Docs
+
+- [x] Add clone endpoints to API reference
+- [ ] Add resource grouping/labels and append workflow documentation
+- [ ] Add markdown/code preview instructions and supported types list
 # To-Do List
 
 ## Database and Backend

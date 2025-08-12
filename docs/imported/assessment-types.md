@@ -87,6 +87,14 @@ The `drag-and-drop` type has several subtypes that MUST be properly handled:
      - Correct answers in sequence
      - Optional extra words
 
+5. **Image Caption Matching** (`image-caption`)
+   - Students drag captions to match with pictures
+   - Requires:
+     - Images (multiple pictures)
+     - Caption word bank
+     - Correct caption-image pairs
+     - Optional extra captions for difficulty
+
 ## Important Notes
 
 1. **Type-Specific Fields**
@@ -109,6 +117,7 @@ The `drag-and-drop` type has several subtypes that MUST be properly handled:
    - `speaking`: Audio/video recording
    - `drag-and-drop/sequence`: Optional audio prompts
    - `drag-and-drop/image-fill-blank`: Image files
+   - `drag-and-drop/image-caption`: Image files
 
 ## Implementation Guidelines
 
